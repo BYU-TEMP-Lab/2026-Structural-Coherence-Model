@@ -1,0 +1,63 @@
+{
+    "output_dir": "batch_plots",
+    "plots": [
+        {
+            "title": "Sodium Chloride Thermal Conductivity",
+            "composition": {
+                "NaCl": 1.0
+            },
+            "temp_range": [
+                500,
+                1200
+            ],
+            "methods": [
+                "Present Model",
+                "Gheribi-KT24",
+                "Ideal"
+            ],
+            "measurement_sources": [],
+            "xlim": [
+                400,
+                1300
+            ],
+            "ylim": [
+                0.4,
+                1.0
+            ],
+            "dpi": 300
+        },
+        {
+            "title": "60% NaCl - 40% KCl Mixture",
+            "composition": {
+                "NaCl": 0.6,
+                "KCl": 0.4
+            },
+            "temp_range": [
+                600,
+                1100
+            ],
+            "methods": [
+                "Present Model",
+                "Present Model, Mix Data"
+            ],
+            "measurement_sources": []
+        },
+        {
+            "title": "50% NaCl - 30% KCl - 20% MgCl2 Mixture",
+            "composition": {
+                "NaCl": 0.5,
+                "KCl": 0.3,
+                "MgCl2": 0.2
+            },
+            "temp_range": [
+                700,
+                1000
+            ],
+            "methods": [
+                "Present Model",
+                "Zhao-PGM",
+                "Ideal"
+            ]
+        }
+    ]
+}

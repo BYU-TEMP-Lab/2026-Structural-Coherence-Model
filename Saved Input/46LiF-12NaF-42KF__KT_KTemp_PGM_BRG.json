@@ -1,0 +1,1 @@
+{"selected_compounds": ["LiF", "NaF", "KF"], "temp_range": {"min_temp": "900", "max_temp": "1300"}, "selected_methods": ["Kinetic Theory", "Kinetic Theory, Empirical Fit", "Phonon Gas Model", "Bridgman"], "selected_MSTDB": {"0.46LiF-0.12NaF-0.42KF": 1}, "selected_measurement_data": {}, "use_data": "", "compositions": [["46", "12", "42"]]}

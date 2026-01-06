@@ -1,0 +1,1 @@
+{"selected_compounds": ["NaF", "KF", "UF4"], "temp_range": {"min_temp": "991", "max_temp": "1200"}, "selected_methods": ["Kinetic Theory Cahill-Poll \u03bb", "Kinetic Theory Emp-Fit", "Kinetic Theory 2024", "Phonon Gas Model"], "selected_MSTDB": {}, "selected_measurement_data": {"0.42KF-0.28NaF-0.30UF4 (Rudenko, 2024)": 1}, "use_data": "", "compositions": [["", "", ""]]}
