@@ -3752,266 +3752,184 @@ def get_cell_value(csv_file, target_row_header, target_column_header):
     # If the target row or column header is not found, return None or handle it as needed
     return None
 
-
-# Load the dataframe once globally.
-# Ensure 'mixture_salt_exp_data.xlsx' is in the same folder as your script.
-try:
-    DF_SALT_DATA = pd.read_excel('mixture_salt_exp_data.xlsx')
-    # Ensure the ID column is treated as a string
-    DF_SALT_DATA['Mix_ID'] = DF_SALT_DATA['Mix_ID'].astype(str)
-except FileNotFoundError:
-    print("Warning: 'mixture_salt_exp_data.xlsx' not found. prop_lookup will return zeros.")
-    DF_SALT_DATA = pd.DataFrame()
-
 def prop_lookup(method, Compound, mol_fracs):
-    """
-    Looks up experimental properties from an Excel file.
-    Returns format: density_mix, sound_velocity_mix, specific_heat_mix
-    """
-    # Initialize default return values (Zeros)
-    density_mix = [0, 0]
-    sound_velocity_mix = [0, 0]
-    specific_heat_mix = [0, 0, 'm'] # Default unit 'm'
-
-    # Only run logic if method contains 'Mix'
-    if 'Mix' not in method:
-        return density_mix, sound_velocity_mix, specific_heat_mix
-
-    # --- Step 1: Normalize the Input to match Excel Key ---
-    # Handle cases where Compound might be a single string or a list
-    if isinstance(Compound, str):
-        comp_list = [Compound]
+    r_ac_mix = 0
+    density_mix = [0,0]
+    sound_velocity_mix = [0,0]
+    specific_heat_mix = [0,0]
+    
+    # Function to extract base compound name (removing source information in parentheses)
+    def get_base_compound(compound_list):
+        return [c.split(' (')[0] if isinstance(c, str) and '(' in c else c for c in compound_list]
+    
+    # Handle both string and list inputs for Compound
+    if isinstance(Compound, list):
+        base_compound = get_base_compound(Compound)
+        compound_key = Compound  # Keep original for exact matching
     else:
-        comp_list = Compound
-
-    # Handle cleaning of names (removing source info like ' (Bu)')
-    clean_comps = [c.split(' (')[0] if isinstance(c, str) and '(' in c else c for c in comp_list]
-
-    # If fractions aren't provided or don't match length, handle gracefully
-    if not mol_fracs or len(mol_fracs) != len(clean_comps):
-        if len(clean_comps) == 1:
-            current_fracs = [1.0]
-        else:
-            print(f"Error: Mismatch between compounds {clean_comps} and fractions {mol_fracs}")
-            return density_mix, sound_velocity_mix, specific_heat_mix
-    else:
-        current_fracs = mol_fracs
-
-    # Zip compounds and fractions, then SORT ALPHABETICALLY by compound name
-    # This ensures [0.35, 0.65], ['NaCl', 'MgCl2'] becomes "0.65MgCl2-0.35NaCl"
-    zipped_data = sorted(zip(clean_comps, current_fracs), key=lambda x: x[0])
-    
-    # Construct the ID String
-    key_parts = [f"{frac}{comp}" for comp, frac in zipped_data]
-    search_key = "-".join(key_parts)
-
-    # --- Step 2: Extract Data from DataFrame ---
-    if DF_SALT_DATA.empty:
-        return density_mix, sound_velocity_mix, specific_heat_mix
-
-    # Search for the row where Mix_ID matches our search_key
-    row = DF_SALT_DATA.loc[DF_SALT_DATA['Mix_ID'] == search_key]
-
-    if not row.empty:
-        try:
-            # Specific Heat: [Intercept, Slope, Unit]
-            cp_int = float(row['Cp_Int'].iloc[0])
-            cp_slope = float(row['Cp_Slope'].iloc[0])
-            cp_unit = str(row['Cp_Unit'].iloc[0])
-            specific_heat_mix = [cp_int, cp_slope, cp_unit]
-
-            # Sound Velocity: [Intercept, Slope]
-            snd_int = float(row['Sound_Int'].iloc[0])
-            snd_slope = float(row['Sound_Slope'].iloc[0])
-            sound_velocity_mix = [snd_int, snd_slope]
-
-            # Density: [Intercept, Slope]
-            rho_int = float(row['Rho_Int'].iloc[0])
-            rho_slope = float(row['Rho_Slope'].iloc[0])
-            density_mix = [rho_int, rho_slope]
-            
-        except (ValueError, KeyError) as e:
-            print(f"Data formatting error in Excel for {search_key}: {e}")
-            pass
-
-    return density_mix, sound_velocity_mix, specific_heat_mix
-
-# def prop_lookup(method, Compound, mol_fracs):
-    # r_ac_mix = 0
-    # density_mix = [0,0]
-    # sound_velocity_mix = [0,0]
-    # specific_heat_mix = [0,0]
-    
-    # # Function to extract base compound name (removing source information in parentheses)
-    # def get_base_compound(compound_list):
-    #     return [c.split(' (')[0] if isinstance(c, str) and '(' in c else c for c in compound_list]
-    
-    # # Handle both string and list inputs for Compound
-    # if isinstance(Compound, list):
-    #     base_compound = get_base_compound(Compound)
-    #     compound_key = Compound  # Keep original for exact matching
-    # else:
-    #     base_compound = Compound.split(' (')[0] if '(' in Compound else Compound
+        base_compound = Compound.split(' (')[0] if '(' in Compound else Compound
       
-    # if 'GECM' in method:
-    #     # Check for exact match with source first (e.g., 'CaCl2 (Bu)')
-    #     if isinstance(Compound, list) and len(Compound) == 1 and isinstance(Compound[0], str):
-    #         if 'CaCl2 (Bu)' in Compound[0]:
-    #             r_ac_mix = 4.8E-10  # Example value for Bu data, replace with actual value
-    #         elif 'CaCl2 (McGreevey)' in Compound[0] or 'CaCl2' in Compound[0]:
-    #             r_ac_mix = 5.033965984936765E-10  # Original McGreevy value
-    #     # Fall back to base compound matching if no source-specific match found
-    #     if r_ac_mix == 0:
-    #         if base_compound == ['LiCl'] or (isinstance(Compound, str) and 'LiCl' in Compound):
-    #             r_ac_mix = 4.118098594123714E-10    # 100% Walz, 878 K, 2019
-    #         elif base_compound == ['NaCl'] or (isinstance(Compound, str) and 'NaCl' in Compound):
-    #             r_ac_mix = 4.599211434277691E-10    # 100% Walz, 1074.15 K, 2019
-    #         elif base_compound == ['KCl'] or (isinstance(Compound, str) and 'KCl' in Compound):
-    #             r_ac_mix = 5.061494421764213E-10    # 100% Walz, 1043 K, 2019
-    #         elif base_compound == ['LiF'] or (isinstance(Compound, str) and 'LiF' in Compound):
-    #             r_ac_mix = 3.44935E-10    # 100% Walz, 1121 K, 2019
-    #         elif base_compound == ['NaF'] or (isinstance(Compound, str) and 'NaF' in Compound):
-    #             r_ac_mix = 3.7969068224247864E-10   # 100% Walz, 1266.15 K, 2019
-    #         elif base_compound == ['KF'] or (isinstance(Compound, str) and 'KF' in Compound):
-    #             r_ac_mix = 4.254924144410876E-10    # 100% Walz, 1131.15 K, 2019
-    #         elif base_compound == ['RbF'] or (isinstance(Compound, str) and 'RbF' in Compound):
-    #             r_ac_mix = 3.143356787E-10          # 100% Walz, 1068.15 K, 2019
-    #         elif base_compound == ['CsF'] or (isinstance(Compound, str) and 'CsF' in Compound):
-    #             r_ac_mix = 3.392004301E-10          # 100% Walz, 955.15 K, 2019
-    #         elif base_compound == ['MgCl2'] or (isinstance(Compound, str) and 'MgCl2' in Compound):
-    #             r_ac_mix = 4.7852054075804915E-10   # 100% McGreevy, 998 K, 1987
-    #         elif base_compound == ['CaCl2'] or (isinstance(Compound, str) and 'CaCl2' in Compound):
-    #             r_ac_mix = 5.033965984936765E-10    # 100% McGreevy, 1093 K, 1987
-    #         elif base_compound == ['SrCl2'] or (isinstance(Compound, str) and 'SrCl2' in Compound):
-    #             r_ac_mix = 5.10679E-10              # 100% McGreevy, 1198 K, 1987
-    #         elif base_compound == ['NaNO3'] or (isinstance(Compound, str) and 'NaNO3' in Compound):
-    #             r_ac_mix = 2.921000675E-10          # 100% 
-    #     elif sorted(Compound) == sorted(['NaCl','UCl3']): # and mol_fracs == [0.63,0.37]:
-    #         r_ac_mix = 2.89258E-10 #3.00685145E-10  # 64-36% Andersson, 2022
-    #     elif Compound == ['LiF','BeF2'] and mol_fracs == [0.5,0.5]:
-    #         r_ac_mix = 1.9572e-10  # 50-50% Sun, 2024
-    #     elif Compound == ['LiF','BeF2'] and mol_fracs == [0.66,0.34]:
-    #         r_ac_mix = 2.080697E-10 # 2.090906E-10 #1.7449105E-10  first peak   # #1.660250E-10     # 50-50% Sun, 2024
-    #     elif Compound == ['LiF','NaF']:
-    #         r_ac_mix = 2.28638E-10  # 60-40% Grizzi, 2024
-    #     elif Compound == ['LiF','NaF','KF']:
-    #         r_ac_mix = 2.32906E-10 # 2.618998138E-10  # 46.5-11.5-42% Frandsen, 2020
-    #     elif Compound == ['NaF','KF','MgF2']:
-    #         r_ac_mix = 2.56459E-10  # 34.5-59-6.5%, Rudenko, 2024
-    #     elif Compound == ['MgCl2','NaCl','KCl']:
-    #         r_ac_mix = 2.77031E-10  # 20.47-41.3-38.23%, Jiang, 2024
-    #     # elif sorted(Compound) == sorted(['LiF','KF','UF4']):
-    #     #     r_ac_mix = 2.733382581251662e-10  # 0.2727LiF-0.1818NaF-0.091UF4 Grizzi, 2024
-    #     elif Compound == ['LiF','NaF','UF4']:
-    #         r_ac_mix = 2.19714e-10  # 54.54LiF-336.36NaF-9.1UF4 Grizzi, 2024
-    #     elif Compound == ['NaCl','KCl','ZnCl']:
-    #         r_ac_mix = 2.65503e-10  # 0.22NaCl-0.393KCl-0.387ZnCl2",'Xi, 2024; 1073K
-    #     else:
-    #         r_ac_mix = 0
+    if 'GECM' in method:
+        # Check for exact match with source first (e.g., 'CaCl2 (Bu)')
+        if isinstance(Compound, list) and len(Compound) == 1 and isinstance(Compound[0], str):
+            if 'CaCl2 (Bu)' in Compound[0]:
+                r_ac_mix = 4.8E-10  # Example value for Bu data, replace with actual value
+            elif 'CaCl2 (McGreevey)' in Compound[0] or 'CaCl2' in Compound[0]:
+                r_ac_mix = 5.033965984936765E-10  # Original McGreevy value
+        # Fall back to base compound matching if no source-specific match found
+        if r_ac_mix == 0:
+            if base_compound == ['LiCl'] or (isinstance(Compound, str) and 'LiCl' in Compound):
+                r_ac_mix = 4.118098594123714E-10    # 100% Walz, 878 K, 2019
+            elif base_compound == ['NaCl'] or (isinstance(Compound, str) and 'NaCl' in Compound):
+                r_ac_mix = 4.599211434277691E-10    # 100% Walz, 1074.15 K, 2019
+            elif base_compound == ['KCl'] or (isinstance(Compound, str) and 'KCl' in Compound):
+                r_ac_mix = 5.061494421764213E-10    # 100% Walz, 1043 K, 2019
+            elif base_compound == ['LiF'] or (isinstance(Compound, str) and 'LiF' in Compound):
+                r_ac_mix = 3.44935E-10    # 100% Walz, 1121 K, 2019
+            elif base_compound == ['NaF'] or (isinstance(Compound, str) and 'NaF' in Compound):
+                r_ac_mix = 3.7969068224247864E-10   # 100% Walz, 1266.15 K, 2019
+            elif base_compound == ['KF'] or (isinstance(Compound, str) and 'KF' in Compound):
+                r_ac_mix = 4.254924144410876E-10    # 100% Walz, 1131.15 K, 2019
+            elif base_compound == ['RbF'] or (isinstance(Compound, str) and 'RbF' in Compound):
+                r_ac_mix = 3.143356787E-10          # 100% Walz, 1068.15 K, 2019
+            elif base_compound == ['CsF'] or (isinstance(Compound, str) and 'CsF' in Compound):
+                r_ac_mix = 3.392004301E-10          # 100% Walz, 955.15 K, 2019
+            elif base_compound == ['MgCl2'] or (isinstance(Compound, str) and 'MgCl2' in Compound):
+                r_ac_mix = 4.7852054075804915E-10   # 100% McGreevy, 998 K, 1987
+            elif base_compound == ['CaCl2'] or (isinstance(Compound, str) and 'CaCl2' in Compound):
+                r_ac_mix = 5.033965984936765E-10    # 100% McGreevy, 1093 K, 1987
+            elif base_compound == ['SrCl2'] or (isinstance(Compound, str) and 'SrCl2' in Compound):
+                r_ac_mix = 5.10679E-10              # 100% McGreevy, 1198 K, 1987
+            elif base_compound == ['NaNO3'] or (isinstance(Compound, str) and 'NaNO3' in Compound):
+                r_ac_mix = 2.921000675E-10          # 100% 
+        elif sorted(Compound) == sorted(['NaCl','UCl3']): # and mol_fracs == [0.63,0.37]:
+            r_ac_mix = 2.89258E-10 #3.00685145E-10  # 64-36% Andersson, 2022
+        elif Compound == ['LiF','BeF2'] and mol_fracs == [0.5,0.5]:
+            r_ac_mix = 1.9572e-10  # 50-50% Sun, 2024
+        elif Compound == ['LiF','BeF2'] and mol_fracs == [0.66,0.34]:
+            r_ac_mix = 2.080697E-10 # 2.090906E-10 #1.7449105E-10  first peak   # #1.660250E-10     # 50-50% Sun, 2024
+        elif Compound == ['LiF','NaF']:
+            r_ac_mix = 2.28638E-10  # 60-40% Grizzi, 2024
+        elif Compound == ['LiF','NaF','KF']:
+            r_ac_mix = 2.32906E-10 # 2.618998138E-10  # 46.5-11.5-42% Frandsen, 2020
+        elif Compound == ['NaF','KF','MgF2']:
+            r_ac_mix = 2.56459E-10  # 34.5-59-6.5%, Rudenko, 2024
+        elif Compound == ['MgCl2','NaCl','KCl']:
+            r_ac_mix = 2.77031E-10  # 20.47-41.3-38.23%, Jiang, 2024
+        # elif sorted(Compound) == sorted(['LiF','KF','UF4']):
+        #     r_ac_mix = 2.733382581251662e-10  # 0.2727LiF-0.1818NaF-0.091UF4 Grizzi, 2024
+        elif Compound == ['LiF','NaF','UF4']:
+            r_ac_mix = 2.19714e-10  # 54.54LiF-336.36NaF-9.1UF4 Grizzi, 2024
+        elif Compound == ['NaCl','KCl','ZnCl']:
+            r_ac_mix = 2.65503e-10  # 0.22NaCl-0.393KCl-0.387ZnCl2",'Xi, 2024; 1073K
+        else:
+            r_ac_mix = 0
 
-    # # Properties of mixtures (if known)
-    #         # density_mix = [A,B]           <-- kg/m^3; A: Intercept, B: Slope
-    #         # sound_velocity_mix = [A,B]    <-- m/s;    A: Intercept, B: Slope
-    #         # specific_heat_mix = [A,B,u]   <-- J/molK; A: Intercept, B: Slope, u: Units ('g'=J/g-K, 'm'=J/mol-K)
-    # if 'Mix' in method:
-    #     # Use base_compound for mixture comparisons
-    #     if Compound == ['NaCl','UCl3'] or Compound == ['UCl3','NaCl']:
-    #         specific_heat_mix = [0.59,0,'g']    # Rose, 2023
-    #         density_mix = [3856.705588,-0.830163884]   # Desyatnik, 1975; Agca, 2022        density_mix = [4220,-0.103]  # Parker 2022 [110], 0.667-0.333   
-    #     if Compound == ['KCl','UCl3'] or Compound == ['UCl3','KCl']:
-    #         if mol_fracs == [0.85,0.15] or mol_fracs == [0.15,0.85]:
-    #             specific_heat_mix = [0.776451613,0,'g']     # Kim, 2023
-    #             density_mix = [2302.446,0]                  # Bratescu, 2023
-    #         if mol_fracs == [0.75,0.25] or mol_fracs == [0.25,0.75]:
-    #             specific_heat_mix = [0.630783358,0,'g']    # Kim, 2023
-    #             density_mix = [2772.128,0]   # Bratescu, 2023
-    #         if mol_fracs == [0.65,0.35] or mol_fracs == [0.35,0.65]:
-    #             specific_heat_mix = [0.527826334,0,'g']    # Kim, 2023
-    #             density_mix = [3236.471,0]   # Bratescu, 2023     
-    #         if mol_fracs == [0.5,0.5]:
-    #             specific_heat_mix = [0.461451613,0,'g']    # Kim, 2023
-    #             density_mix = [3918.574,0]   # Bratescu, 2023   
-    #     elif Compound == ['LiF','BeF2'] or Compound == ['BeF2','LiF']:
-    #         if mol_fracs == [0.66,0.34] or mol_fracs == [0.34,0.66]:
-    #             density_mix = [2410,-0.488]  # Cantor 1973 [29], FLiBe 33.59mol%BeF2
-    #             sound_velocity_mix = [4272.309646,-1.101929884] # 66-34% Cantor, 1968
-    #             specific_heat_mix = [79.9,0,'m']    # Rosenthal 1969 [122]
-    #             # specific_heat_mix = [2.12735,0,'g']  # 67-33% Avg from Rosenthal, 1969 and Lichtenstein, 2020 
-    #             # All very different
-    #             # specific_heat_mix = [79.9,0,'m']  # 67-33% Rosenthal, 1969 (Same as Sohal in J/g-K)
-    #             # specific_heat_mix = [1.84,0,'g']  # 67-33% Lichtenstein, 2020 
-    #             # specific_heat_mix = [2.4147,0,'g']  # 67-33% Sohal, 2010 <-- Not from reliable measurements
-    #             #density_mix = [2413,-0.488]  # Janz, 1974, FLiBe 33mol%BeF2
-    #             #2110 * (1.885 + 2.762*mol_fracs[1] + mol_fracs[1]**2) / (1.773 + 2.663*mol_fracs[0] )
-    #         elif mol_fracs == [0.5,0.5]:
-    #             density_mix = [2350,-0.424]  # Cantor 1973 [29], FLiBe 50mol%BeF2
-    #             # sound_velocity_mix = [4272.309646,-1.101929884] # 66-34% Cantor, 1968
-    #     elif Compound == ['LiF','NaF'] or Compound == ['NaF','LiF']:
-    #         density_mix = [2530,-0.555]     #Janz 1974 [69]
-    #         sound_velocity_mix = [3244,-0.787]    # 63LiF-37%NaF Minchenko, 1985
-    #         specific_heat_mix = [125,-0.0666,'m']   # Powers 1963 [114]
-    #     elif Compound == ['KCl','NaCl'] or Compound == ['NaCl','KCl']:
-    #         density_mix = [2130,-0.568]     # Van Artsdalen 1955 [144]
-    #     elif Compound == ['KCl','LiCl'] or Compound == ['LiCl','KCl']:
-    #         # if mol_fracs == [0.582,0.418] or mol_fracs == [0.418,0.582]:
-    #         specific_heat_mix = [70.9,0,'m']    # Redkin 2017 [118] 
-    #         density_mix = [2030,-0.528]     # Van Artsdalen 1955 [144]
-    #         # if mol_fracs == [0.637,0.363] or mol_fracs == [0.363,0.637]:
-    #         #     specific_heat_mix = [70.9,0,'m']    # Redkin 2017 [118] 
-    #         #     density_mix = [2130,-0.568]     # Van Artsdalen 1955 [144]
-    #     elif Compound == ['LiF','NaF','KF'] or Compound == ['KF','LiF','NaF'] or Compound == ['NaF','KF','LiF']:
-    #         density_mix = [2680,-0.268]  # Gallagher 2021 [157]
-    #         sound_velocity_mix = [3295.78,-1.20]    # 46.5-11.5-42% Robertson, 2022     #[3241.15,-1.20]    # 46.5-11.5-42% Robertson, 2022
-    #         specific_heat_mix = [40.3,0.0439,'m']  # Rogers 1982 [121]
-    #         # density_mix = [2729.3,-0.73]  # 46.5-11.5-42%, Vriesema [1979], Ingersoll et al. [2007], and Williams et al. [2006]
-    #         # sound_velocity_mix = [3295.78,-1.20]    # 46.5-11.5-42% Robertson, 2022     #[3241.15,-1.20]    # 46.5-11.5-42% Robertson, 2022
-    #         # specific_heat_mix = [1.90557,0,'g']  # 46.5-11.5-42% Sohal, 2010        #[1882.8*0.0413,0,'m']  # 46.5-11.5-42% Sohal, 2010
-    #         # # molar_volume_mix = [1.34991e-5,7.55e-9] # Kubikova,2013 
-    #     elif Compound == ['NaCl','CaCl2'] or Compound == ['CaCl2','NaCl']:  #and mol_fracs == [0.4903,0.5097]:
-    #         density_mix = [2284.532 ,-0.406]  # 49.03-50.97%, Wei, 2022 (NaCa1) FIXED
-    #         specific_heat_mix = [2.039484384,-0.00114002,'g']  # 49.03-50.97%, Wei, 2022 (NaCa1) GOOD
-    #     elif Compound == ['KCl','CaCl2'] or Compound == ['CaCl2','KCl']:  #and mol_fracs == [0.4903,0.5097]:
-    #         density_mix = [2274.784,-0.492]  # Wei, 2022 (KaCa3, Janz, 1978), 0.282CaCl2-0.718KCl
-    #     elif Compound == ['NaCl','CaCl2','MgCl2'] or Compound == ['NaCl','MgCl2','CaCl2'] or Compound == ['MgCl2','CaCl2','NaCl'] or Compound == ['MgCl2','NaCl','CaCl2'] or Compound == ['CaCl2','MgCl2','NaCl'] or Compound == ['CaCl2','NaCl','MgCl2']:#and mol_fracs == [0.535,0.15,0.315]:
-    #         density_mix = [1966.924,-0.215]  # 53.5-15-31.5%, Wei, 2022 (NaCaMg1) FIXED
-    #         specific_heat_mix = [0.729590059, 0.000437771,'g']  # 53.5-15-31.5%, Wei, 2022 (NaCaMg1) FIXED
+    # Properties of mixtures (if known)
+            # density_mix = [A,B]           <-- kg/m^3; A: Intercept, B: Slope
+            # sound_velocity_mix = [A,B]    <-- m/s;    A: Intercept, B: Slope
+            # specific_heat_mix = [A,B,u]   <-- J/molK; A: Intercept, B: Slope, u: Units ('g'=J/g-K, 'm'=J/mol-K)
+    if 'Mix' in method:
+        # Use base_compound for mixture comparisons
+        if Compound == ['NaCl','UCl3'] or Compound == ['UCl3','NaCl']:
+            specific_heat_mix = [0.59,0,'g']    # Rose, 2023
+            density_mix = [3856.705588,-0.830163884]   # Desyatnik, 1975; Agca, 2022        density_mix = [4220,-0.103]  # Parker 2022 [110], 0.667-0.333   
+        if Compound == ['NaF','UF4'] or Compound == ['UF4','NaF']:
+            density_mix = [4780,-0.82]   # Blanke, 1958 (MSTDB-TP, 0.76NaF)
+        if Compound == ['KCl','UCl3'] or Compound == ['UCl3','KCl']:
+            if mol_fracs == [0.85,0.15] or mol_fracs == [0.15,0.85]:
+                specific_heat_mix = [0.776451613,0,'g']     # Kim, 2023
+                density_mix = [2302.446,0]                  # Bratescu, 2023
+            if mol_fracs == [0.75,0.25] or mol_fracs == [0.25,0.75]:
+                specific_heat_mix = [0.630783358,0,'g']    # Kim, 2023
+                density_mix = [2772.128,0]   # Bratescu, 2023
+            if mol_fracs == [0.65,0.35] or mol_fracs == [0.35,0.65]:
+                specific_heat_mix = [0.527826334,0,'g']    # Kim, 2023
+                density_mix = [3236.471,0]   # Bratescu, 2023     
+            if mol_fracs == [0.5,0.5]:
+                specific_heat_mix = [0.461451613,0,'g']    # Kim, 2023
+                density_mix = [3918.574,0]   # Bratescu, 2023   
+        elif Compound == ['LiF','BeF2'] or Compound == ['BeF2','LiF']:
+            if mol_fracs == [0.66,0.34] or mol_fracs == [0.34,0.66]:
+                density_mix = [2410,-0.488]  # Cantor 1973 [29], FLiBe 33.59mol%BeF2
+                sound_velocity_mix = [4272.309646,-1.101929884] # 66-34% Cantor, 1968
+                specific_heat_mix = [79.9,0,'m']    # Rosenthal 1969 [122]
+                # specific_heat_mix = [2.12735,0,'g']  # 67-33% Avg from Rosenthal, 1969 and Lichtenstein, 2020 
+                # All very different
+                # specific_heat_mix = [79.9,0,'m']  # 67-33% Rosenthal, 1969 (Same as Sohal in J/g-K)
+                # specific_heat_mix = [1.84,0,'g']  # 67-33% Lichtenstein, 2020 
+                # specific_heat_mix = [2.4147,0,'g']  # 67-33% Sohal, 2010 <-- Not from reliable measurements
+                #density_mix = [2413,-0.488]  # Janz, 1974, FLiBe 33mol%BeF2
+                #2110 * (1.885 + 2.762*mol_fracs[1] + mol_fracs[1]**2) / (1.773 + 2.663*mol_fracs[0] )
+            elif mol_fracs == [0.5,0.5]:
+                density_mix = [2350,-0.424]  # Cantor 1973 [29], FLiBe 50mol%BeF2
+                # sound_velocity_mix = [4272.309646,-1.101929884] # 66-34% Cantor, 1968
+        elif Compound == ['LiF','NaF'] or Compound == ['NaF','LiF']:
+            density_mix = [2530,-0.555]     #Janz 1974 [69]
+            sound_velocity_mix = [3244,-0.787]    # 63LiF-37%NaF Minchenko, 1985
+            specific_heat_mix = [125,-0.0666,'m']   # Powers 1963 [114]
+        elif Compound == ['KCl','NaCl'] or Compound == ['NaCl','KCl']:
+            density_mix = [2130,-0.568]     # Van Artsdalen 1955 [144]
+        elif Compound == ['KCl','LiCl'] or Compound == ['LiCl','KCl']:
+            # if mol_fracs == [0.582,0.418] or mol_fracs == [0.418,0.582]:
+            specific_heat_mix = [70.9,0,'m']    # Redkin 2017 [118] 
+            density_mix = [2030,-0.528]     # Van Artsdalen 1955 [144]
+            # if mol_fracs == [0.637,0.363] or mol_fracs == [0.363,0.637]:
+            #     specific_heat_mix = [70.9,0,'m']    # Redkin 2017 [118] 
+            #     density_mix = [2130,-0.568]     # Van Artsdalen 1 55 [144]
+        elif Compound == ['LiF','NaF','KF'] or Compound == ['KF','LiF','NaF'] or Compound == ['NaF','KF','LiF']:
+            density_mix = [2680,-0.268]  # Gallagher 2021 [157]
+            sound_velocity_mix = [3295.78,-1.20]    # 46.5-11.5-42% Robertson, 2022     #[3241.15,-1.20]    # 46.5-11.5-42% Robertson, 2022
+            specific_heat_mix = [40.3,0.0439,'m']  # Rogers 1982 [121]
+            # density_mix = [2729.3,-0.73]  # 46.5-11.5-42%, Vriesema [1979], Ingersoll et al. [2007], and Williams et al. [2006]
+            # sound_velocity_mix = [3295.78,-1.20]    # 46.5-11.5-42% Robertson, 2022     #[3241.15,-1.20]    # 46.5-11.5-42% Robertson, 2022
+            # specific_heat_mix = [1.90557,0,'g']  # 46.5-11.5-42% Sohal, 2010        #[1882.8*0.0413,0,'m']  # 46.5-11.5-42% Sohal, 2010
+            # # molar_volume_mix = [1.34991e-5,7.55e-9] # Kubikova,2013 
+        elif Compound == ['NaCl','CaCl2'] or Compound == ['CaCl2','NaCl']:  #and mol_fracs == [0.4903,0.5097]:
+            density_mix = [2284.532 ,-0.406]  # 49.03-50.97%, Wei, 2022 (NaCa1) FIXED
+            specific_heat_mix = [2.039484384,-0.00114002,'g']  # 49.03-50.97%, Wei, 2022 (NaCa1) GOOD
+        elif Compound == ['KCl','CaCl2'] or Compound == ['CaCl2','KCl']:  #and mol_fracs == [0.4903,0.5097]:
+            density_mix = [2274.784,-0.492]  # Wei, 2022 (KaCa3, Janz, 1978), 0.282CaCl2-0.718KCl
+        elif Compound == ['NaCl','CaCl2','MgCl2'] or Compound == ['NaCl','MgCl2','CaCl2'] or Compound == ['MgCl2','CaCl2','NaCl'] or Compound == ['MgCl2','NaCl','CaCl2'] or Compound == ['CaCl2','MgCl2','NaCl'] or Compound == ['CaCl2','NaCl','MgCl2']:#and mol_fracs == [0.535,0.15,0.315]:
+            density_mix = [1966.924,-0.215]  # 53.5-15-31.5%, Wei, 2022 (NaCaMg1) FIXED
+            specific_heat_mix = [0.729590059, 0.000437771,'g']  # 53.5-15-31.5%, Wei, 2022 (NaCaMg1) FIXED
 
 
-    #     elif Compound == ['NaCl','CaCl2','KCl2'] or Compound == ['KCl2','NaCl','CaCl2'] or Compound == ['CaCl2','KCl2','NaCl']:#and mol_fracs == [0.417,0.525,0.058]:
-    #         density_mix = [2206.804,-0.451]  # 41.7-52.5-5.8%, Wei, 2022 (NaCaK) GOOD
-    #         specific_heat_mix = [0.999094437,3.66312E-06,'g']  # 41.7-52.5-5.8%, Wei, 2022 (NaCaK)
-    #     elif Compound == ['NaF','KF','MgF2'] or Compound == ['NaF','MgF2','KF'] or Compound == ['MgF2','KF','NaF'] or Compound == ['MgF2','NaF','KF'] or Compound == ['KF','MgF2','NaF'] or Compound == ['KF','NaF','MgF2']:
-    #         density_mix = [2730,-0.658]  # Solano 2021 [134]
-    #         specific_heat_mix = [1.35,0,'g']#[74,0,'m']  # 34.5-59-6.5%, Rudenko, 2024 GOOD
-    #     elif Compound == ['MgCl2','NaCl','KCl'] or Compound == ['MgCl2','KCl','NaCl'] or Compound == ['KCl','MgCl2','NaCl'] or Compound == ['KCl','NaCl','MgCl2'] or Compound == ['NaCl','MgCl2','KCl'] or Compound == ['NaCl','KCl','MgCl2']:
-    #         # if mol_fracs == [0.38,0.21,0.41] or mol_fracs == [0.38,0.41,0.21] or mol_fracs == [0.41,0.38,0.21]:
-    #         # Doesn't match out PDF
-    #         density_mix = [2111,-0.564]  # 45.98-15.11-38.91%, Wang, 2021
-    #         specific_heat_mix = [1.437955,-0.0005,'g']  # 45.98-15.11-38.91%, Wang, 2021 FIXED
+        elif Compound == ['NaCl','CaCl2','KCl2'] or Compound == ['KCl2','NaCl','CaCl2'] or Compound == ['CaCl2','KCl2','NaCl']:#and mol_fracs == [0.417,0.525,0.058]:
+            density_mix = [2206.804,-0.451]  # 41.7-52.5-5.8%, Wei, 2022 (NaCaK) GOOD
+            specific_heat_mix = [0.999094437,3.66312E-06,'g']  # 41.7-52.5-5.8%, Wei, 2022 (NaCaK)
+        elif Compound == ['NaF','KF','MgF2'] or Compound == ['NaF','MgF2','KF'] or Compound == ['MgF2','KF','NaF'] or Compound == ['MgF2','NaF','KF'] or Compound == ['KF','MgF2','NaF'] or Compound == ['KF','NaF','MgF2']:
+            density_mix = [2730,-0.658]  # Solano 2021 [134]
+            specific_heat_mix = [1.35,0,'g']#[74,0,'m']  # 34.5-59-6.5%, Rudenko, 2024 GOOD
+        elif Compound == ['MgCl2','NaCl','KCl'] or Compound == ['MgCl2','KCl','NaCl'] or Compound == ['KCl','MgCl2','NaCl'] or Compound == ['KCl','NaCl','MgCl2'] or Compound == ['NaCl','MgCl2','KCl'] or Compound == ['NaCl','KCl','MgCl2']:
+            # if mol_fracs == [0.38,0.21,0.41] or mol_fracs == [0.38,0.41,0.21] or mol_fracs == [0.41,0.38,0.21]:
+            # Doesn't match out PDF
+            density_mix = [2111,-0.564]  # 45.98-15.11-38.91%, Wang, 2021
+            specific_heat_mix = [1.437955,-0.0005,'g']  # 45.98-15.11-38.91%, Wang, 2021 FIXED
             
-    #     if sound_velocity_mix == [0,0]:
-    #         if base_compound == ['LiCl'] or (isinstance(Compound, str) and 'LiCl' in Compound):
-    #             sound_velocity_mix = [3500, 0] 
-    #         elif base_compound == ['NaCl'] or (isinstance(Compound, str) and 'NaCl' in Compound):
-    #             sound_velocity_mix = [2720, 0]
-    #         elif base_compound == ['KCl'] or (isinstance(Compound, str) and 'KCl' in Compound):
-    #             sound_velocity_mix = [2360, 0]
-    #         elif base_compound == ['LiF'] or (isinstance(Compound, str) and 'LiF' in Compound):
-    #             sound_velocity_mix = [3500, 0]
-    #         elif base_compound == ['NaF'] or (isinstance(Compound, str) and 'NaF' in Compound):
-    #             sound_velocity_mix = [2720, 0]
-    #         elif base_compound == ['KF'] or (isinstance(Compound, str) and 'KF' in Compound):
-    #             sound_velocity_mix = [2360, 0]
-    #         elif base_compound == ['MgCl2'] or (isinstance(Compound, str) and 'MgCl2' in Compound):
-    #             sound_velocity_mix = [3400, 0]
-    #         elif base_compound == ['CaCl2'] or (isinstance(Compound, str) and 'CaCl2' in Compound):
-    #             sound_velocity_mix = [2200, 0]
-    # else:
-    #     density_mix = [0,0]
-    #     sound_velocity_mix = [0,0]
-    #     specific_heat_mix = [0,0]
+        if sound_velocity_mix == [0,0]:
+            if base_compound == ['LiCl'] or (isinstance(Compound, str) and 'LiCl' in Compound):
+                sound_velocity_mix = [3500, 0] 
+            elif base_compound == ['NaCl'] or (isinstance(Compound, str) and 'NaCl' in Compound):
+                sound_velocity_mix = [2720, 0]
+            elif base_compound == ['KCl'] or (isinstance(Compound, str) and 'KCl' in Compound):
+                sound_velocity_mix = [2360, 0]
+            elif base_compound == ['LiF'] or (isinstance(Compound, str) and 'LiF' in Compound):
+                sound_velocity_mix = [3500, 0]
+            elif base_compound == ['NaF'] or (isinstance(Compound, str) and 'NaF' in Compound):
+                sound_velocity_mix = [2720, 0]
+            elif base_compound == ['KF'] or (isinstance(Compound, str) and 'KF' in Compound):
+                sound_velocity_mix = [2360, 0]
+            elif base_compound == ['MgCl2'] or (isinstance(Compound, str) and 'MgCl2' in Compound):
+                sound_velocity_mix = [3400, 0]
+            elif base_compound == ['CaCl2'] or (isinstance(Compound, str) and 'CaCl2' in Compound):
+                sound_velocity_mix = [2200, 0]
+    else:
+        density_mix = [0,0]
+        sound_velocity_mix = [0,0]
+        specific_heat_mix = [0,0]
 
-    # return r_ac_mix, density_mix, sound_velocity_mix, specific_heat_mix
+    return r_ac_mix, density_mix, sound_velocity_mix, specific_heat_mix
 
 def functionlibrary():
     functions = {

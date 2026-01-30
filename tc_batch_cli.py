@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import re
 from matplotlib import pyplot as plt
+import matplotlib.ticker as mticker
 
 from TC_Models_V1 import functionlibrary
 
@@ -295,6 +296,7 @@ def plot_tc_cli(
     show_plot: bool = False,
     output_dir: str = 'Comparison_Plot_Figs',
     show_diff_comp_in_legend: bool = True,
+    export_plot_data_csv: bool = False,
     *,
     existing_fig: Optional[plt.Figure] = None,
     existing_ax: Optional[plt.Axes] = None,
@@ -309,6 +311,7 @@ def plot_tc_cli(
     series_marker: Optional[str] = None,
     series_markevery: Optional[int] = None,
     legend_kwargs: Optional[Dict[str, Any]] = None,
+    ax_kwargs: Optional[Dict[str, Any]] = None,
 ):
     """
     Non-GUI plotting function mirroring GUI_plotter.CreateGraphs behavior.
@@ -325,6 +328,7 @@ def plot_tc_cli(
     - show_plot: whether to display the plot window.
     - output_dir: directory to save the figure.
     - show_diff_comp_in_legend: if True, append experimental composition in legend when it differs from the modeled salt; if False, never append composition.
+    - export_plot_data_csv: if True, export temperature and thermal conductivity data to CSV for replotting.
     """
     TC_C_df, MSTDB_df, SCL_PDF_df, TC_Measurement_df = _load_data()
 
@@ -343,18 +347,18 @@ def plot_tc_cli(
         plt.rcParams['font.family'] = 'Times New Roman'
         plt.rcParams['mathtext.fontset'] = 'custom'
         plt.rcParams['mathtext.rm'] = 'Times New Roman'
-        plt.rcParams['font.size'] = 12
-        plt.rcParams['axes.labelsize'] = 14
+        plt.rcParams['font.size'] = 13#12
+        plt.rcParams['axes.labelsize'] = 15#14
         plt.rcParams['axes.labelweight'] = 'bold'
         plt.rcParams['axes.linewidth'] = 1.5
-        plt.rcParams['xtick.labelsize'] = 12
-        plt.rcParams['ytick.labelsize'] = 12
+        plt.rcParams['xtick.labelsize'] = 13#12
+        plt.rcParams['ytick.labelsize'] = 13#12
         plt.rcParams['xtick.direction'] = 'out'
         plt.rcParams['ytick.direction'] = 'out'
         plt.rcParams['xtick.major.width'] = 1.5
         plt.rcParams['ytick.major.width'] = 1.5
         # Legend and small text/annotation sizing (~0.85x of tick labels)
-        _tick_size = 12
+        _tick_size = 13#12
         _small_text = int(round(0.85 * _tick_size))
         plt.rcParams['legend.frameon'] = False
         plt.rcParams['legend.fontsize'] = _small_text
@@ -372,7 +376,7 @@ def plot_tc_cli(
 
     # Add composition as text in the top left corner (no border)
     if show_composition_annotation:
-        ax.text(0.05, 0.95, formatted_title, transform=ax.transAxes, fontsize=12,
+        ax.text(0.05, 0.95, formatted_title, transform=ax.transAxes, fontsize=15,
                 verticalalignment='top', horizontalalignment='left',
                 bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8, edgecolor='none'))
 
@@ -446,6 +450,9 @@ def plot_tc_cli(
     model_predictions_at_min_temp: Dict[str, float] = {}
     min_measured_temp: Optional[float] = None
     additional_outputs: Dict[str, Union[float, List[float], np.ndarray]] = {}
+    
+    # Store plot data for CSV export
+    plot_data_for_csv: List[Dict[str, Any]] = []
 
     try:
         # Run models
@@ -518,6 +525,17 @@ def plot_tc_cli(
                 ax.plot(T, lambda_mix_T['thermal_conductivity'], **plot_kwargs)
             else:
                 ax.plot(T, lambda_mix_T, **plot_kwargs)
+
+            # Collect data for CSV export
+            if export_plot_data_csv:
+                tc_data = lambda_mix_T['thermal_conductivity'] if isinstance(lambda_mix_T, dict) else lambda_mix_T
+                for temp, tc_val in zip(T, tc_data):
+                    plot_data_for_csv.append({
+                        'Composition': model_label,
+                        'Method': method,
+                        'Temperature_K': temp,
+                        'Thermal_Conductivity_W_mK': tc_val
+                    })
 
             # Track model compositions for legend logic
             model_compositions.add(comp_label)
@@ -686,7 +704,8 @@ def plot_tc_cli(
             save_label,
             show_plot=show_plot,
             legend_loc=legend_loc,
-            legend_kwargs=legend_kwargs
+            legend_kwargs=legend_kwargs,
+            ax_kwargs=ax_kwargs,
         )
 
     # Build melt_row for CSV (GUI-compatible)
@@ -730,6 +749,26 @@ def plot_tc_cli(
     if save_results_csv:
         _save_results_to_csv([melt_row])
 
+    # Export plot data to CSV if requested
+    if export_plot_data_csv and plot_data_for_csv:
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Create DataFrame and group by Composition (label)
+        plot_df = pd.DataFrame(plot_data_for_csv)
+        
+        # Group by unique composition labels and create separate CSV files
+        for unique_label in plot_df['Composition'].unique():
+            label_data = plot_df[plot_df['Composition'] == unique_label]
+            
+            # Sanitize label for filename (replace spaces and special characters)
+            safe_label = unique_label.replace(' ', '_').replace('-', '_').replace('.', '_')
+            csv_filename = f"{safe_label}_plot_data.csv"
+            csv_path = os.path.join(output_dir, csv_filename)
+            
+            # Save to CSV
+            label_data.to_csv(csv_path, index=False)
+            print(f"Plot data for '{unique_label}' exported to: {csv_path}")
+
     return {
         'figure_path': fig_path,
         'melt_row': melt_row,
@@ -749,36 +788,84 @@ def _finalize_plot(
     legend_loc: Optional[str] = None,
     legend_kwargs: Optional[Dict[str, Any]] = None,
     x_bounds: Optional[Tuple[float, float]] = None,
+    ax_kwargs: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Finalize axes styling, add axis padding/legend, and persist figure."""
 
     fig.tight_layout()
-    ax.relim()
-    ax.autoscale_view()
-
-    # Apply padding around data limits to keep whitespace in the plot
-    x_min, x_max = ax.dataLim.intervalx
-    if x_bounds is not None and all(np.isfinite(val) for val in x_bounds):
-        if not np.isfinite(x_min) or not np.isfinite(x_max):
-            x_min, x_max = x_bounds
+    
+    # First, handle axis limits and ticks if provided
+    if ax_kwargs:
+        ticks_at_limits = bool(ax_kwargs.get('ticks_at_limits', False))
+        # Apply axis limits first
+        if 'xlim' in ax_kwargs:
+            x_min, x_max = ax_kwargs['xlim']
+            ax.set_xlim(x_min, x_max)
+        if 'ylim' in ax_kwargs:
+            y_min, y_max = ax_kwargs['ylim']
+            ax.set_ylim(y_min, y_max)
+            
+        # Apply ticks if specified
+        if 'xticks' in ax_kwargs:
+            xticks_val = ax_kwargs['xticks']
+            if isinstance(xticks_val, int):
+                cur_xlim = ax.get_xlim()
+                xticks_val = np.linspace(cur_xlim[0], cur_xlim[1], max(2, xticks_val))
+            ax.xaxis.set_major_locator(mticker.FixedLocator(xticks_val))
+            ax.xaxis.set_minor_locator(mticker.NullLocator())
+        elif ticks_at_limits and 'xlim' in ax_kwargs:
+            xticks_val = [x_min, x_max]
+            ax.xaxis.set_major_locator(mticker.FixedLocator(xticks_val))
+            ax.xaxis.set_minor_locator(mticker.NullLocator())
+        if 'yticks' in ax_kwargs:
+            yticks_val = ax_kwargs['yticks']
+            if isinstance(yticks_val, int):
+                cur_ylim = ax.get_ylim()
+                yticks_val = np.linspace(cur_ylim[0], cur_ylim[1], max(2, yticks_val))
+            ax.yaxis.set_major_locator(mticker.FixedLocator(yticks_val))
+            ax.yaxis.set_minor_locator(mticker.NullLocator())
+        elif ticks_at_limits and 'ylim' in ax_kwargs:
+            yticks_val = [y_min, y_max]
+            ax.yaxis.set_major_locator(mticker.FixedLocator(yticks_val))
+            ax.yaxis.set_minor_locator(mticker.NullLocator())
+            
+        # If limits were set via ax_kwargs, we're done with auto-scaling
+        if 'xlim' in ax_kwargs and 'ylim' in ax_kwargs:
+            pass  # Skip auto-scaling since we've set explicit limits
         else:
-            x_min = min(x_min, x_bounds[0])
-            x_max = max(x_max, x_bounds[1])
+            # Only auto-scale the axes that weren't explicitly set
+            ax.relim()
+            ax.autoscale_view()
+    else:
+        # Default behavior if no ax_kwargs provided
+        ax.relim()
+        ax.autoscale_view()
 
-    if np.isfinite(x_min) and np.isfinite(x_max):
-        x_range = x_max - x_min
-        if not np.isfinite(x_range) or x_range == 0:
-            x_range = max(abs(x_min), 1.0)
-        x_pad = max(x_range * 0.05, 5.0)
-        ax.set_xlim(x_min - x_pad, x_max + x_pad)
+    # Only apply padding if we're not using explicit limits from ax_kwargs
+    if not ax_kwargs or 'xlim' not in ax_kwargs:
+        x_min, x_max = ax.dataLim.intervalx
+        if x_bounds is not None and all(np.isfinite(val) for val in x_bounds):
+            if not np.isfinite(x_min) or not np.isfinite(x_max):
+                x_min, x_max = x_bounds
+            else:
+                x_min = min(x_min, x_bounds[0])
+                x_max = max(x_max, x_bounds[1])
 
-    y_min, y_max = ax.dataLim.intervaly
-    if np.isfinite(y_min) and np.isfinite(y_max):
-        y_range = y_max - y_min
-        if not np.isfinite(y_range) or y_range == 0:
-            y_range = max(abs(y_min), 0.5)
-        y_pad = max(y_range * 0.1, 0.1)
-        ax.set_ylim(y_min - y_pad, y_max + y_pad)
+        if np.isfinite(x_min) and np.isfinite(x_max):
+            x_range = x_max - x_min
+            if not np.isfinite(x_range) or x_range == 0:
+                x_range = max(abs(x_min), 1.0)
+            x_pad = max(x_range * 0.05, 5.0)
+            ax.set_xlim(x_min - x_pad, x_max + x_pad)
+
+    if not ax_kwargs or 'ylim' not in ax_kwargs:
+        y_min, y_max = ax.dataLim.intervaly
+        if np.isfinite(y_min) and np.isfinite(y_max):
+            y_range = y_max - y_min
+            if not np.isfinite(y_range) or y_range == 0:
+                y_range = max(abs(y_min), 0.5)
+            y_pad = max(y_range * 0.1, 0.1)
+            ax.set_ylim(y_min - y_pad, y_max + y_pad*2)
 
     legend_params: Dict[str, Any] = {
         'facecolor': 'white',
@@ -791,6 +878,7 @@ def _finalize_plot(
         'columnspacing': 0.8,
         'handlelength': 1.5,
         'labelspacing': 0.3,
+        'fontsize': 14,
     }
     if legend_kwargs:
         legend_params.update(legend_kwargs)
@@ -806,7 +894,9 @@ def _finalize_plot(
     os.makedirs(output_dir, exist_ok=True)
     sanitized_label = save_label.replace(' ', '_')
     fig_path = os.path.join(output_dir, f"TC_{sanitized_label}.png")
-    fig.savefig(fig_path, bbox_inches='tight', dpi=300)
+    fig.savefig(fig_path, bbox_inches='tight', dpi=1600)
+    fig_path_pdf = os.path.join(output_dir, f"TC_{sanitized_label}.pdf")
+    fig.savefig(fig_path_pdf, bbox_inches='tight')
     if show_plot:
         plt.show()
     else:
@@ -826,8 +916,10 @@ def plot_multi_composition_cli(
     show_plot: bool = False,
     output_dir: str = 'Comparison_Plot_Figs',
     show_diff_comp_in_legend: bool = True,
+    export_plot_data_csv: bool = False,
     figure_label: Optional[str] = None,
     legend_loc: Optional[str] = None,
+    ax_kwargs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Overlay multiple compositions on a single comparison plot.
@@ -864,7 +956,12 @@ def plot_multi_composition_cli(
     for idx, cfg in enumerate(composition_configs):
         comp = cfg['composition']
         comp_compounds, comp_fracs, normalized_label = _parse_composition(comp)
-        formatted_label = format_composition_with_subscripts(normalized_label)
+        
+        # Use custom label from configuration if provided, otherwise use formatted composition
+        if 'label' in cfg:
+            formatted_label = cfg['label']
+        else:
+            formatted_label = format_composition_with_subscripts(normalized_label)
         desired_method = 'Present Model' if len(comp_compounds) == 1 else 'Present Model, Mix Data'
         comp_methods = [desired_method]
         if not comp_methods:
@@ -885,6 +982,7 @@ def plot_multi_composition_cli(
             show_plot=False,
             output_dir=output_dir,
             show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', show_diff_comp_in_legend),
+            export_plot_data_csv=cfg.get('export_plot_data_csv', export_plot_data_csv),
             existing_fig=fig,
             existing_ax=ax,
             shared_palette=palette,
@@ -897,6 +995,7 @@ def plot_multi_composition_cli(
             composition_label_override=formatted_label,
             series_marker=marker_cycle[idx % len(marker_cycle)],
             series_markevery=cfg.get('series_markevery', 12),
+            ax_kwargs=ax_kwargs,
         )
 
         fig = comp_result['fig']
@@ -908,11 +1007,12 @@ def plot_multi_composition_cli(
 
     assert fig is not None and ax is not None  # for type checkers
 
-    # Harmonize x-limits using provided temperature ranges
+    # Harmonize x-limits using provided temperature ranges (unless explicitly specified)
     if temp_bounds:
         global_min = min(bound[0] for bound in temp_bounds)
         global_max = max(bound[1] for bound in temp_bounds)
-        ax.set_xlim(global_min, global_max)
+        if not ax_kwargs or 'xlim' not in ax_kwargs:
+            ax.set_xlim(global_min, global_max)
 
     save_label = figure_label or "__".join(comp_labels)
     legend_loc_to_use = legend_loc or 'upper left'
@@ -927,12 +1027,59 @@ def plot_multi_composition_cli(
         legend_loc=legend_loc_to_use,
         legend_kwargs=legend_kwargs_final or None,
         x_bounds=(global_min, global_max),
+        ax_kwargs=ax_kwargs,
     )
 
     return {
         'figure_path': fig_path,
         'melt_rows': melt_rows,
     }
+
+
+def run_many(configs: List[Dict]):
+    """
+    Convenience to run many configurations in code. Each config maps directly to plot_tc_cli params.
+    """
+    results = []
+    for cfg in configs:
+        if 'compositions' in cfg:
+            res = plot_multi_composition_cli(
+                composition_configs=cfg['compositions'],
+                temp_range=cfg.get('temp_range'),
+                methods=cfg.get('methods'),
+                scl_composition_with_source=cfg.get('scl_composition_with_source'),
+                measurement_sources=cfg.get('measurement_sources'),
+                mstdb_formulas=cfg.get('mstdb_formulas'),
+                use_available_data=cfg.get('use_available_data', True),
+                save_results_csv=cfg.get('save_results_csv', False),
+                show_plot=cfg.get('show_plot', False),
+                output_dir=cfg.get('output_dir', 'Comparison_Plot_Figs'),
+                show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', True),
+                export_plot_data_csv=cfg.get('export_plot_data_csv', False),
+                figure_label=cfg.get('figure_label'),
+                legend_loc=cfg.get('legend_loc'),
+                ax_kwargs=cfg.get('ax_kwargs'),
+            )
+        else:
+            res = plot_tc_cli(
+                composition=cfg['composition'],
+                temp_range=cfg['temp_range'],
+                methods=cfg['methods'],
+                scl_composition_with_source=cfg.get('scl_composition_with_source'),
+                measurement_sources=cfg.get('measurement_sources'),
+                mstdb_formulas=cfg.get('mstdb_formulas'),
+                use_available_data=cfg.get('use_available_data', True),
+                save_results_csv=cfg.get('save_results_csv', False),
+                show_plot=cfg.get('show_plot', False),
+                output_dir=cfg.get('output_dir', 'Comparison_Plot_Figs'),
+                show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', True),
+                export_plot_data_csv=cfg.get('export_plot_data_csv', False),
+                figure_name_override=cfg.get('figure_label'),
+                legend_loc=cfg.get('legend_loc'),
+                ax_kwargs=cfg.get('ax_kwargs'),
+            )
+        results.append(res)
+    return results
 
 
 def _save_results_to_csv(melt_results: List[Dict]):
@@ -1005,45 +1152,3 @@ def _save_results_to_csv(melt_results: List[Dict]):
         if write_header:
             w.writerow(header)
         w.writerows(rows)
-
-
-def run_many(configs: List[Dict]):
-    """
-    Convenience to run many configurations in code. Each config maps directly to plot_tc_cli params.
-    """
-    results = []
-    for cfg in configs:
-        if 'compositions' in cfg:
-            res = plot_multi_composition_cli(
-                composition_configs=cfg['compositions'],
-                temp_range=cfg.get('temp_range'),
-                methods=cfg.get('methods'),
-                scl_composition_with_source=cfg.get('scl_composition_with_source'),
-                measurement_sources=cfg.get('measurement_sources'),
-                mstdb_formulas=cfg.get('mstdb_formulas'),
-                use_available_data=cfg.get('use_available_data', True),
-                save_results_csv=cfg.get('save_results_csv', False),
-                show_plot=cfg.get('show_plot', False),
-                output_dir=cfg.get('output_dir', 'Comparison_Plot_Figs'),
-                show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', True),
-                figure_label=cfg.get('figure_label'),
-                legend_loc=cfg.get('legend_loc'),
-            )
-        else:
-            res = plot_tc_cli(
-                composition=cfg['composition'],
-                temp_range=cfg['temp_range'],
-                methods=cfg['methods'],
-                scl_composition_with_source=cfg.get('scl_composition_with_source'),
-                measurement_sources=cfg.get('measurement_sources'),
-                mstdb_formulas=cfg.get('mstdb_formulas'),
-                use_available_data=cfg.get('use_available_data', True),
-                save_results_csv=cfg.get('save_results_csv', False),
-                show_plot=cfg.get('show_plot', False),
-                output_dir=cfg.get('output_dir', 'Comparison_Plot_Figs'),
-                show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', True),
-                figure_name_override=cfg.get('figure_label'),
-                legend_loc=cfg.get('legend_loc'),
-            )
-        results.append(res)
-    return results

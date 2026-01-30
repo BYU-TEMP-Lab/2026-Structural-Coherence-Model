@@ -35,7 +35,7 @@ BASE_CONFIGS = [
         'measurement_sources': ['LiCl (Nagasaka, 1992)'],
         'scl_composition_with_source': '1.0LiCl (Walz, 2019)',
         'save_results_csv': True,
-        'show_plot': False,
+        'show_plot': True,
     },
     # {
     #     'composition': '1.0NaCl',
@@ -184,11 +184,11 @@ BASE_CONFIGS = [
     {
         'composition': '0.34BeF2-0.66LiF',
         'temp_range': (713.15, 1200.0),
-        'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
+        'methods': ['Gheribi-KT24, Mix Data', 'Present Model, Mix Data'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
         'measurement_sources': ['0.66LiF-0.34BeF2 (Redkin, 2022)', '0.66LiF-0.34BeF2 (Kato, 1983)', '0.66LiF-0.34BeF2 (Bobrova, 2023)'],
         'scl_composition_with_source': '0.34BeF2-0.66LiF (Fayfar, 2023)',
         'save_results_csv': True,
-        'show_plot': False,
+        'show_plot': True,
     },
     # {
     #     'composition': '0.34BeF2-0.66LiF',
@@ -202,11 +202,11 @@ BASE_CONFIGS = [
     {
         'composition': '0.42KF-0.465LiF-0.115NaF',
         'temp_range': (735.0, 1300.0),
-        'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
+        'methods': ['Gheribi-KT24, Mix Data', 'Present Model, Mix Data'],
         'measurement_sources': ['0.465LiF-0.115NaF-0.42KF (Merritt, 2022)', '0.465LiF-0.115NaF-0.42KF (Gallagher, 2022)', '0.465LiF-0.115NaF-0.42KF (Rudenko, 2022)', '0.465LiF-0.115NaF-0.42KF (Robertson, 2022)'],
         'scl_composition_with_source': '0.42KF-0.465LiF-0.115NaF (Frandsen, 2020)',
         'save_results_csv': True,
-        'show_plot': False,
+        'show_plot': True,
     },
     {
         'composition': '0.59KF-0.065MgF2-0.345NaF',
@@ -311,11 +311,11 @@ BASE_CONFIGS = [
     {
         'composition': '0.64NaCl-0.36UCl3',
         'temp_range': (784.15, 1200.0),
-        'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data'],
+        'methods': ['Gheribi-KT24, Mix Data', 'Present Model, Mix Data'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data'],
         'measurement_sources': ['63NaCl-37UCl3 (Termini, 2024)', '65.8NaCl-34.2UCl3 (Rose, 2023)'],
         'scl_composition_with_source': '0.64NaCl-0.36UCl3 (Andersson, 2022)',
         'save_results_csv': True,
-        'show_plot': False,
+        'show_plot': True,
     },
     {
         'composition': '0.63NaCl-0.37UCl3',
@@ -491,15 +491,15 @@ BASE_CONFIGS = [
 ]
 
 SPEC_CONFIGS = [
-    {
-        'composition': '0.5NaCl-0.5KCl',
-        'temp_range': (930, 1200.0),
-        'methods': ['Gheribi-KT24', 'Present Model', 'Ideal'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
-        'measurement_sources': ['0.51NaCl-0.49KCl (Ruth, 2024)','0.44NaCl-0.56KCl (Birri, 2023)','0.44NaCl-0.56KCl (Birri, 2022)'],
-        'scl_composition_with_source': '0.5NaCl-0.5KCl (Manga, 2013)',
-        'save_results_csv': True,
-        'show_plot': True,
-    },
+    # {
+    #     'composition': '0.5NaCl-0.5KCl',
+    #     'temp_range': (930, 1200.0),
+    #     'methods': ['Gheribi-KT24', 'Present Model', 'Ideal'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
+    #     'measurement_sources': ['0.51NaCl-0.49KCl (Ruth, 2024)','0.44NaCl-0.56KCl (Birri, 2023)','0.44NaCl-0.56KCl (Birri, 2022)'],
+    #     'scl_composition_with_source': '0.5NaCl-0.5KCl (Manga, 2013)',
+    #     'save_results_csv': True,
+    #     'show_plot': True,
+    # },
     # {
     #     'composition': '0.535NaCl-0.15CaCl2-0.315MgCl2',
     #     'temp_range': (829, 1250.0),
@@ -522,63 +522,174 @@ SPEC_CONFIGS = [
     # {
     #     'composition': '0.64NaCl-0.36UCl3',
     #     'temp_range': (784.15, 1200.0),
-    #     'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data'],
+    #     'methods': ['Present Model', 'Present Model, Mix Data'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data'],
     #     'measurement_sources': ['63NaCl-37UCl3 (Termini, 2024)', '65.8NaCl-34.2UCl3 (Rose, 2023)'],
     #     'scl_composition_with_source': '0.64NaCl-0.36UCl3 (Andersson, 2022)',
     #     'save_results_csv': True,
-    #     'show_plot': False,
+    #     'show_plot': True,
+    #     'export_plot_data_csv': True,
     # },
-    
     {
-        'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
+        'methods': ['Present Model', 'Present Model, Mix Data'],
         'legend_loc': 'upper left',
         'save_results_csv': True,
         'show_plot': True,
-        'figure_label': 'LiF_NaF_KF',
+        'figure_label': 'NaF-UF4',
+        # 'ax_kwargs': {
+        #     'xlim': (1250, 1650),  # Set your desired x-axis limits
+        #     'ylim': (0.38, 0.72),    # Set your desired y-axis limits
+        #     'xticks': [1300, 1600], # Only show ticks at the limits
+        #     'yticks': [0.4, 0.7]   # Only show ticks at the limits
+        # },
         'compositions': [
             {
-                'composition': '1.0ThF4',
-                'temp_range': (1384, 1600.0),
-                'scl_composition_with_source': '1.0ThF4 (Dai, 2015)',
+                'composition': '0.78NaF-0.22UF4',
+                'label': '0.78NaF-0.22UF4 900K',
+                'temp_range': (900, 1200.0),
+                'scl_composition_with_source': '0.78NaF-0.22UF4 (900K; Zhang, 2024)',
+                # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
+                'export_plot_data_csv': True,
+            },
+            {
+                'composition': '0.78NaF-0.22UF4',
+                'label': '0.78NaF-0.22UF4 1000K',
+                'temp_range': (900, 1200.0),
+                'scl_composition_with_source': '0.78NaF-0.22UF4 (1000K; Zhang, 2024)',
+                # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
+                'export_plot_data_csv': True,
+            },
+            {
+                'composition': '0.78NaF-0.22UF4',
+                'label': '0.78NaF-0.22UF4 1100K',
+                'temp_range': (900, 1200.0),
+                'scl_composition_with_source': '0.78NaF-0.22UF4 (1100K; Zhang, 2024)',
+                # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
+                'export_plot_data_csv': True,
+            },
+            {
+                'composition': '0.78NaF-0.22UF4',
+                'label': '0.78NaF-0.22UF4 1200K',
+                'temp_range': (900, 1200.0),
+                'scl_composition_with_source': '0.78NaF-0.22UF4 (1200K; Zhang, 2024)',
+                # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
+                'export_plot_data_csv': True,
+            },
+            {
+                'composition': '1.0NaF',
+                'label': 'NaF',
+                'temp_range': (1268, 1500.0),
+                'scl_composition_with_source': '1.0NaF (Walz, 2019)',
                 # 'measurement_sources': ['NaF (Smirnov, 1987)', 'NaF (Polyakov, 1975)'],
+                'export_plot_data_csv': True,
             },
             {
                 'composition': '1.0UF4',
-                'temp_range': (1309, 1600.0),
+                'label': 'UF4',
+                'temp_range': (1309, 1500.0),
                 'scl_composition_with_source': '1.0UF4 (Ocadiz-Flores, 2021)',
                 # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
-            },
-            {
-                'composition': '0.3CaCl2-0.7LiCl',
-                'temp_range': (771.15, 1000.0),
-                'scl_composition_with_source': '0.3CaCl2-0.7LiCl (Liang, 2024)',
-            },
-            {
-                'composition': '0.41KCl-0.38MgCl2-0.21NaCl',
-                'temp_range': (660.15, 1000.0),
-                'scl_composition_with_source': '0.41KCl-0.38MgCl2-0.21NaCl (Jiang, 2024)',
-            },
-            {
-                'composition': '0.85KCl-0.15UCl3',
-                'temp_range': (957, 1200.0),
-                'scl_composition_with_source': '0.85KCl-0.15UCl3 (Andersson, 2022)',
-            },
-            {
-                'composition': '0.50KCl-0.50UCl3',
-                'temp_range': (815, 1200.0),
-                'scl_composition_with_source': '0.50KCl-0.50UCl3 (Andersson, 2022)',
-            },
-            {
-                'composition': '0.5454LiF-0.3636NaF-0.091UF4',
-                'temp_range': (923, 1400.0),
-                'scl_composition_with_source': '0.5454LiF-0.3636NaF-0.091UF4 (Grizzi, 2024)',
-                # 'measurement_sources': ['KF (Smirnov, 1987)'],
+                'export_plot_data_csv': True,
             },
         ],
     },
+
+    {
+        'methods': ['Present Model', 'Present Model, Mix Data'],
+        'legend_loc': 'upper left',
+        'save_results_csv': True,
+        'show_plot': True,
+        'figure_label': 'NaCl-UCl3',
+        # 'ax_kwargs': {
+        #     'xlim': (1250, 1650),  # Set your desired x-axis limits
+        #     'ylim': (0.38, 0.72),    # Set your desired y-axis limits
+        #     'xticks': [1300, 1600], # Only show ticks at the limits
+        #     'yticks': [0.4, 0.7]   # Only show ticks at the limits
+        # },
+        'compositions': [
+            {
+                'composition': '0.63NaCl-0.37UCl3',
+                'label': '0.63NaCl-0.37UCl3 1250K',
+                'temp_range': (784.15, 1200.0),
+                'scl_composition_with_source': '0.63NaCl-0.37UCl3 (Andersson, 2022)',
+                # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
+                'export_plot_data_csv': True,
+            },
+            {
+                'composition': '1.0NaCl',
+                'label': 'NaCl',
+                'temp_range': (1073.8, 1400.0),
+                'scl_composition_with_source': '1.0NaCl (Lu, 2021)',
+                # 'measurement_sources': ['NaF (Smirnov, 1987)', 'NaF (Polyakov, 1975)'],
+                'export_plot_data_csv': True,
+            },
+        ],
+    },
+
+    # {
+    #     'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
+    #     'legend_loc': 'upper left',
+    #     'save_results_csv': True,
+    #     'show_plot': True,
+    #     'figure_label': 'LiF_NaF_KF',
+    #     'ax_kwargs': {
+    #         'xlim': (1250, 1650),  # Set your desired x-axis limits
+    #         'ylim': (0.38, 0.72),    # Set your desired y-axis limits
+    #         'xticks': [1300, 1600], # Only show ticks at the limits
+    #         'yticks': [0.4, 0.7]   # Only show ticks at the limits
+    #     },
+    #     'compositions': [
+    #         # {
+    #         #     'composition': '1.0ThF4',
+    #         #     'temp_range': (1384, 1600.0),
+    #         #     'scl_composition_with_source': '1.0ThF4 (Dai, 2015)',
+    #         #     # 'measurement_sources': ['NaF (Smirnov, 1987)', 'NaF (Polyakov, 1975)'],
+    #         # },
+    #         {
+    #             'composition': '1.0UF4',
+    #             'temp_range': (1309, 1600.0),
+    #             'scl_composition_with_source': '1.0UF4 (Ocadiz-Flores, 2021)',
+    #             # 'measurement_sources': ['LiF (Golyshev, 1992)', 'LiF (Smirnov, 1987)', 'LiF (Khlebnikov, 1981)'],
+    #         },
+    #         # {
+    #         #     'composition': '0.3CaCl2-0.7LiCl',
+    #         #     'temp_range': (771.15, 1000.0),
+    #         #     'scl_composition_with_source': '0.3CaCl2-0.7LiCl (Liang, 2024)',
+    #         # },
+    #         # {
+    #         #     'composition': '0.41KCl-0.38MgCl2-0.21NaCl',
+    #         #     'temp_range': (660.15, 1000.0),
+    #         #     'scl_composition_with_source': '0.41KCl-0.38MgCl2-0.21NaCl (Jiang, 2024)',
+    #         # },
+    #         # {
+    #         #     'composition': '0.85KCl-0.15UCl3',
+    #         #     'temp_range': (957, 1200.0),
+    #         #     'scl_composition_with_source': '0.85KCl-0.15UCl3 (Andersson, 2022)',
+    #         # },
+    #         # {
+    #         #     'composition': '0.50KCl-0.50UCl3',
+    #         #     'temp_range': (815, 1200.0),
+    #         #     'scl_composition_with_source': '0.50KCl-0.50UCl3 (Andersson, 2022)',
+    #         # },
+    #         {
+    #             'composition': '0.5454LiF-0.3636NaF-0.091UF4',
+    #             'temp_range': (923, 1400.0),
+    #             'scl_composition_with_source': '0.5454LiF-0.3636NaF-0.091UF4 (Grizzi, 2024)',
+    #             # 'measurement_sources': ['KF (Smirnov, 1987)'],
+    #         },
+    #     ],
+    # },
 ]
 
 ACTINIDE_CONFIGS = [
+    {
+        'composition': '0.34BeF2-0.66LiF',
+        'temp_range': (713.15, 1200.0),
+        'methods': ['Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data'], #'Gheribi-KT24', 'Gheribi-KT24, Mix Data', 'Present Model', 'Present Model, Mix Data', 'Zhao-PGM', 'Zhao-PGM, Mix Data', 'Ideal'],
+        'measurement_sources': ['0.66LiF-0.34BeF2 (Redkin, 2022)', '0.66LiF-0.34BeF2 (Kato, 1983)', '0.66LiF-0.34BeF2 (Bobrova, 2023)'],
+        'scl_composition_with_source': '0.34BeF2-0.66LiF (Fayfar, 2023)',
+        'save_results_csv': True,
+        'show_plot': True,
+    },
     {
         'composition': '0.535NaCl-0.15CaCl2-0.315MgCl2',
         'temp_range': (829, 1250.0),
@@ -619,5 +730,5 @@ ACTINIDE_CONFIGS = [
 ]
 
 if __name__ == "__main__":
-    configs = ACTINIDE_CONFIGS
+    configs = SPEC_CONFIGS
     run_many(configs)
