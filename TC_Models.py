@@ -3330,8 +3330,8 @@ def ChapmanEnskog(df,MSTDB_df,SCL_PDF_df,compound_input,mol_fracs,Temp_Range, V_
 
         
 
-        viscosityA[i]=get_cell_value('Molten_Salt_Thermophysical_Properties.csv', Compound[i], 'Viscosity (mN*s/m2): A*exp(B/(R*T(K)))')
-        viscosityB[i]=get_cell_value('Molten_Salt_Thermophysical_Properties.csv', Compound[i], 'Viscosity (mN*s/m2): A*exp(B/(R*T(K)))_B')
+        viscosityA[i]=get_cell_value('MSTDB.csv', Compound[i], 'Viscosity (mN*s/m2): A*exp(B/(R*T(K)))')
+        viscosityB[i]=get_cell_value('MSTDB.csv', Compound[i], 'Viscosity (mN*s/m2): A*exp(B/(R*T(K)))_B')
 
 
     #initialize a temperature range

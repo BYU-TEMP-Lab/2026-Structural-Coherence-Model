@@ -9,21 +9,21 @@ import re
 from matplotlib import pyplot as plt
 import matplotlib.ticker as mticker
 
-from TC_Models import functionlibrary
+from TC_models import functionlibrary
 
-# Import the subscript formatting function from scl_calc.py
+# Import the subscript formatting function from SCL_calc.py
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from scl_calc import format_composition_with_subscripts
+from SCL_calc import format_composition_with_subscripts
 
 
 def _load_data():
-    TC_C_df = pd.read_excel('TC_Compound_Data.xlsx')
-    MSTDB_df = pd.read_csv('Molten_Salt_Thermophysical_Properties.csv')
-    TC_Measurement_df = pd.read_excel('TC_Measurement_Data.xlsx')
+    TC_C_df = pd.read_excel('TC_compound_data.xlsx')
+    MSTDB_df = pd.read_csv('MSTDB.csv')
+    TC_Measurement_df = pd.read_excel('TC_measurement_data.xlsx')
     # Match TC_calc source of SCL data
-    SCL_PDF_df = pd.read_csv('scl_results.csv')
+    SCL_PDF_df = pd.read_csv('SCL_results.csv')
     return TC_C_df, MSTDB_df, SCL_PDF_df, TC_Measurement_df
 
 
@@ -319,9 +319,9 @@ def plot_tc_cli(
     Params
     - composition: composition as string/dict/list. Fractions can be 0-1 or 0-100 (%).
     - temp_range: (T_melt, T_max). The first value is treated as melting temperature.
-    - methods: list of method names as from TC_Models.functionlibrary().keys().
+    - methods: list of method names as from TC_models.functionlibrary().keys().
     - scl_composition_with_source: e.g., '1.0NaCl (NIST, 2023)'. Used by present models.
-    - measurement_sources: list of 'Source' names from TC_Measurement_Data.xlsx.
+    - measurement_sources: list of 'Source' names from TC_measurement_data.xlsx.
     - mstdb_formulas: list of GUI-like composition strings to draw MSTDB A+B*T lines.
     - use_available_data: if True, pass expon=1 as in GUI when radio DATA is selected; else expon=0.
     - save_results_csv: if True, append results to TC_calc_results.csv in the same directory.
@@ -431,7 +431,7 @@ def plot_tc_cli(
         pass
 
     # Prepare optional SCL CSV swap to force internal CSV readers to use the matched row
-    scl_csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scl_results.csv')
+    scl_csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'SCL_results.csv')
     scl_backup_path = None
     if scl_row is not None and os.path.exists(scl_csv_path):
         try:
@@ -440,9 +440,9 @@ def plot_tc_cli(
             shutil.copy2(scl_csv_path, scl_backup_path)
             # Write a one-row CSV with the matched SCL row
             pd.DataFrame([scl_row]).to_csv(scl_csv_path, index=False)
-            print(f"Temporarily swapped scl_results.csv to matched row for {scl_composition_with_source}")
+            print(f"Temporarily swapped SCL_results.csv to matched row for {scl_composition_with_source}")
         except Exception as e:
-            print(f"Warning: failed to swap scl_results.csv: {e}")
+            print(f"Warning: failed to swap SCL_results.csv: {e}")
 
     # Aggregations like GUI
     model_results_store: Dict[str, Tuple[np.ndarray, Union[np.ndarray, Dict[str, np.ndarray]]]] = {}
@@ -545,9 +545,9 @@ def plot_tc_cli(
         if scl_backup_path and os.path.exists(scl_backup_path):
             try:
                 shutil.move(scl_backup_path, scl_csv_path)
-                print("Restored original scl_results.csv")
+                print("Restored original SCL_results.csv")
             except Exception as e:
-                print(f"Warning: failed to restore scl_results.csv: {e}")
+                print(f"Warning: failed to restore SCL_results.csv: {e}")
 
     # MSTDB-TP lines (optional)
     mstdb_records = _mstdb_lines_at_range(MSTDB_df, mstdb_formulas or [], temp_range)

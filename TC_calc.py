@@ -8,7 +8,7 @@ import xlwt
 from tkinter import *
 from tkinter import ttk, filedialog
 import pandas as pd
-from TC_Models import *
+from TC_models import *
 import random
 import seaborn as sns
 import re
@@ -554,9 +554,9 @@ def CreateGraphs():
     # Build one row for the composition, with a column for each model from functionlibrary()
     import importlib.util
     import sys
-    # Dynamically import TC_Models.py to get functionlibrary
-    model_module_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_Models.py')
-    spec = importlib.util.spec_from_file_location("TC_Models", model_module_path)
+    # Dynamically import TC_models.py to get functionlibrary
+    model_module_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_models.py')
+    spec = importlib.util.spec_from_file_location("TC_models", model_module_path)
     model_mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = model_mod
     spec.loader.exec_module(model_mod)
@@ -651,15 +651,15 @@ def Save_fig(title):
 
 # TC_composition_inputs - Convert excel and CSV files
 # Read the compound data, handling potential source information in the compound names
-TC_C_df = pd.read_excel('TC_Compound_Data.xlsx')
+TC_C_df = pd.read_excel('TC_compound_data.xlsx')
 # Ensure the first column is treated as string to preserve any source information
 TC_C_df.iloc[:, 0] = TC_C_df.iloc[:, 0].astype(str)
 
 # MSTDB-TP_inputs - Convert excel and CSV files
-MSTDB_df = pd.read_csv('Molten_Salt_Thermophysical_Properties.csv')
+MSTDB_df = pd.read_csv('MSTDB.csv')
 
-# TC_Measurement_Data inputs
-TC_Measurement_df = pd.read_excel('TC_Measurement_Data.xlsx')
+# TC_measurement_data inputs
+TC_Measurement_df = pd.read_excel('TC_measurement_data.xlsx')
 
 # SCL_PDF_Analyze results to input
 SCL_PDF_df = pd.read_csv('scl_results.csv')
@@ -908,11 +908,11 @@ def save_results_to_csv():
     import os
     # Define the path to the CSV in the SAME directory as this script
     csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "TC_calc_results.csv")
-    # Always use all model columns from functionlibrary in TC_Models.py
+    # Always use all model columns from functionlibrary in TC_models.py
     import importlib.util
     import sys
-    model_module_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_Models.py')
-    spec = importlib.util.spec_from_file_location("TC_Models", model_module_path)
+    model_module_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_models.py')
+    spec = importlib.util.spec_from_file_location("TC_models", model_module_path)
     model_mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = model_mod
     spec.loader.exec_module(model_mod)
