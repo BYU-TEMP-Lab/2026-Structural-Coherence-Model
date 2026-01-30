@@ -9,7 +9,7 @@ import re
 from matplotlib import pyplot as plt
 import matplotlib.ticker as mticker
 
-from TC_Models_V1 import functionlibrary
+from TC_Models import functionlibrary
 
 # Import the subscript formatting function from scl_calc.py
 import sys
@@ -22,7 +22,7 @@ def _load_data():
     TC_C_df = pd.read_excel('TC_Compound_Data.xlsx')
     MSTDB_df = pd.read_csv('Molten_Salt_Thermophysical_Properties.csv')
     TC_Measurement_df = pd.read_excel('TC_Measurement_Data.xlsx')
-    # Match GUI_plotter source of SCL data
+    # Match TC_calc source of SCL data
     SCL_PDF_df = pd.read_csv('scl_results.csv')
     return TC_C_df, MSTDB_df, SCL_PDF_df, TC_Measurement_df
 
@@ -314,17 +314,17 @@ def plot_tc_cli(
     ax_kwargs: Optional[Dict[str, Any]] = None,
 ):
     """
-    Non-GUI plotting function mirroring GUI_plotter.CreateGraphs behavior.
+    Non-GUI plotting function mirroring TC_calc.CreateGraphs behavior.
 
     Params
     - composition: composition as string/dict/list. Fractions can be 0-1 or 0-100 (%).
     - temp_range: (T_melt, T_max). The first value is treated as melting temperature.
-    - methods: list of method names as from TC_Models_V1.functionlibrary().keys().
+    - methods: list of method names as from TC_Models.functionlibrary().keys().
     - scl_composition_with_source: e.g., '1.0NaCl (NIST, 2023)'. Used by present models.
     - measurement_sources: list of 'Source' names from TC_Measurement_Data.xlsx.
     - mstdb_formulas: list of GUI-like composition strings to draw MSTDB A+B*T lines.
     - use_available_data: if True, pass expon=1 as in GUI when radio DATA is selected; else expon=0.
-    - save_results_csv: if True, append results to GUI_plotter_results.csv in the same directory.
+    - save_results_csv: if True, append results to TC_calc_results.csv in the same directory.
     - show_plot: whether to display the plot window.
     - output_dir: directory to save the figure.
     - show_diff_comp_in_legend: if True, append experimental composition in legend when it differs from the modeled salt; if False, never append composition.
@@ -1083,10 +1083,10 @@ def run_many(configs: List[Dict]):
 
 
 def _save_results_to_csv(melt_results: List[Dict]):
-    """Append results to the same CSV structure as GUI_plotter.save_results_to_csv()."""
+    """Append results to the same CSV structure as TC_calc.save_results_to_csv()."""
     import csv
 
-    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GUI_plotter_results.csv')
+    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_calc_results.csv')
     model_columns = list(functionlibrary().keys())
 
     # GUI header mapping
