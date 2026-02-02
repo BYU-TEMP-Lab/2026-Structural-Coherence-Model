@@ -6,13 +6,13 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
 import re
 from mendeleev import element
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, savgol_filter
 from datetime import datetime
 from scipy.ndimage import gaussian_filter1d
 import csv
 
 def standardize_ion_pair(ion_pair):
-    # Convert to string if it's not already (handles numpy.float64 and other types)
+    # Convert to string if it's not already
     if not isinstance(ion_pair, str):
         ion_pair = str(ion_pair)
     
@@ -34,8 +34,6 @@ def standardize_ion_pair(ion_pair):
     if not elements1 or not elements2:
         raise ValueError(f"Could not extract elements from ion pair: {ion_pair}")
     
-    # For now, just take the first element from each part
-    # You might want to enhance this based on your specific needs
     element1 = elements1[0]
     element2 = elements2[0]
     
@@ -226,11 +224,14 @@ class IonPairPDF:
 
 
 class MoltenSaltPDF:
-    def __init__(self, comp, pdf_file, source, temp, gamma_bc):
+    def __init__(self, comp, pdf_file, source, temp, gamma_bc, apply_savgol=False, savgol_window_length=11, savgol_polyorder=3):
         self.comp = comp
         self.source = source
         self.temp = temp
         self.gamma_bc = gamma_bc
+        self.apply_savgol = apply_savgol
+        self.savgol_window_length = savgol_window_length
+        self.savgol_polyorder = savgol_polyorder
         self.composition, self.ion_counts, self.comp = self.parse_composition(comp)        
         self.weights = self.calculate_weights()
         self.ion_pairs = self.load_pdf_data(pdf_file)
@@ -278,6 +279,28 @@ class MoltenSaltPDF:
             
             x_combined = np.concatenate((x_extended, x_unique))
             y_combined = np.concatenate((y_extended, y_unique))
+
+            # Apply Savgol smoothing if requested
+            if self.apply_savgol:
+                # Ensure window length is odd and greater than polyorder
+                window_length = self.savgol_window_length
+                if window_length % 2 == 0:
+                    window_length += 1  # Make it odd
+                if window_length <= self.savgol_polyorder:
+                    window_length = self.savgol_polyorder + 1
+                    if window_length % 2 == 0:
+                        window_length += 1
+                
+                # Only apply smoothing to the non-zero portion (avoid smoothing the extended zeros)
+                nonzero_start = len(x_extended)  # Start after the zero extension
+                if nonzero_start < len(y_combined):
+                    y_combined[nonzero_start:] = savgol_filter(
+                        y_combined[nonzero_start:], 
+                        window_length=window_length, 
+                        polyorder=self.savgol_polyorder,
+                        mode='nearest'
+                    )
+                    print(f"Applied Savgol smoothing to {ion_pair}: window={window_length}, polyorder={self.savgol_polyorder}")
 
             ion_pairs[ion_pair] = IonPairPDF(ion_pair, x_combined, y_combined, self.weights)
 
@@ -652,7 +675,7 @@ class MoltenSaltPDF:
         print(f"lambda_BC = {round(self.gamma_bc, 5)}")
 
         # Define CSV filename and check if it exists
-        csv_filename = 'scl_results.csv'
+        csv_filename = 'SCL_results.csv'
         file_exists = os.path.isfile(csv_filename)
         
         # Define the base headers that are always present
@@ -1102,8 +1125,8 @@ class PDFAnalyzer:
         self.molten_salts = []
         self.save_plot_data = save_plot_data
 
-    def add_molten_salt(self, pdf_file, comp, source, temp, gamma_bc):
-        salt = MoltenSaltPDF(comp, pdf_file, source, temp, gamma_bc)
+    def add_molten_salt(self, pdf_file, comp, source, temp, gamma_bc, apply_savgol=False, savgol_window_length=11, savgol_polyorder=3):
+        salt = MoltenSaltPDF(comp, pdf_file, source, temp, gamma_bc, apply_savgol, savgol_window_length, savgol_polyorder)
         self.molten_salts.append(salt)
 
     def analyze_all(self):
@@ -1114,7 +1137,7 @@ class PDFAnalyzer:
 
     def plot_all(self):
         for salt in self.molten_salts:
-            salt.plot_pdf(show_plot=False)
+            salt.plot_pdf(show_plot=True)
 
 def main():
     # Set to True to save plot data for all salts
@@ -1123,12 +1146,20 @@ def main():
     analyzer = PDFAnalyzer(save_plot_data=save_all_plot_data)
 
     # Add molten salts to analyze
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0)   # Zhang, 2024; 900K
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_1000_Zhang.csv',"0.78NaF-0.22UF4",'(1000K) Zhang, 2024', 1000, 0)   # Zhang, 2024; 1000K
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_1100_Zhang.csv',"0.78NaF-0.22UF4",'(1100K) Zhang, 2024', 1100, 0)   # Zhang, 2024; 1100K
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_1200_Zhang.csv',"0.78NaF-0.22UF4",'(1200K) Zhang, 2024', 1200, 0)   # Zhang, 2024; 1200K
-    # analyzer.add_molten_salt('PDF_LiCl.csv',"1.0LiCl",'Walz, 2019', 878, 4.10511)   # Walz, 2019; 878K
-    # # analyzer.add_molten_salt('PDF_NaCl.csv',"1.0NaCl",'Walz, 2019', 1074, 4.48028)   # Walz, 2019; 1074.15K
+    # Example with Savgol smoothing:
+    # analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0, 
+    #                         apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)
+    
+    analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0, 
+                            apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 900K
+    analyzer.add_molten_salt('PDF_78NaF-22UF4_1000_Zhang.csv',"0.78NaF-0.22UF4",'(1000K) Zhang, 2024', 1000, 0, 
+                            apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1000K
+    analyzer.add_molten_salt('PDF_78NaF-22UF4_1100_Zhang.csv',"0.78NaF-0.22UF4",'(1100K) Zhang, 2024', 1100, 0, 
+                            apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1100K
+    analyzer.add_molten_salt('PDF_78NaF-22UF4_1200_Zhang.csv',"0.78NaF-0.22UF4",'(1200K) Zhang, 2024', 1200, 0, 
+                            apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1200K
+    analyzer.add_molten_salt('PDF_LiCl.csv',"1.0LiCl",'Walz, 2019', 878, 4.10511)   # Walz, 2019; 878K
+    # ... (rest of the code remains the same)
     # # analyzer.add_molten_salt('NaCl_Lu.csv', "1.0NaCl", 'Lu, 2021', 1200, 4.48028)
     # # analyzer.add_molten_salt('PDF_KCl.csv',"1.0KCl",'Walz, 2019', 1043, 4.47675)   # Walz, 2019; 1043K
 
