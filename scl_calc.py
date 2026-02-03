@@ -294,12 +294,15 @@ class MoltenSaltPDF:
                 # Only apply smoothing to the non-zero portion (avoid smoothing the extended zeros)
                 nonzero_start = len(x_extended)  # Start after the zero extension
                 if nonzero_start < len(y_combined):
-                    y_combined[nonzero_start:] = savgol_filter(
+                    y_filtered = savgol_filter(
                         y_combined[nonzero_start:], 
                         window_length=window_length, 
                         polyorder=self.savgol_polyorder,
                         mode='nearest'
                     )
+                    # Ensure PDF doesn't go below zero by clipping negative values
+                    y_filtered = np.maximum(y_filtered, 0)
+                    y_combined[nonzero_start:] = y_filtered
                     print(f"Applied Savgol smoothing to {ion_pair}: window={window_length}, polyorder={self.savgol_polyorder}")
 
             ion_pairs[ion_pair] = IonPairPDF(ion_pair, x_combined, y_combined, self.weights)
@@ -334,8 +337,7 @@ class MoltenSaltPDF:
                 from mendeleev import element
                 import re
 
-                # Extract cation from salt (e.g., 'NaCl' -> 'Na', 'LiF' -> 'Li')
-                # Look for element symbol followed by optional number
+                # Extract cation from salt
                 elements = re.findall(r'([A-Z][a-z]?)(\d*)', salt)
                 if elements:
                     cation = elements[0][0]  # First element is typically the cation
@@ -430,7 +432,7 @@ class MoltenSaltPDF:
                 conc_ca_i = self.weights[ion_pair_ca_i]
                 y_weighted_ca_i = self.weighted_splines[ion_pair_ca_i](x_range_i)
 
-                c_ca_i = conc_ca_i# * peak_i[1] * peak_i[0]**-1
+                c_ca_i = conc_ca_i
                 sum_c_ca_j = 0
 
                 ion_pair_cc_i = '-'.join(sorted([cation_i, cation_i]))
@@ -440,7 +442,6 @@ class MoltenSaltPDF:
                 except KeyError:
                     y_weighted_cc_i = np.linspace(self.weights[ion_pair_cc_i], self.weights[ion_pair_cc_i], len(x_range_i))
                     no_cc_spline = True
-                    #print("No cation-cation spline data available. Approximating based on concentration.")
 
                 y_ideal = np.zeros_like(x_range_i)
                 sum_conc_ca = 0
@@ -491,7 +492,6 @@ class MoltenSaltPDF:
                     if cc_peak_i[0] is not None:
                         print(f"First cc peak: x = {cc_peak_i[0]:.2f}, y = {cc_peak_i[1]:.2f}")
                         if cc_peak_i[0] > peak_i[0] and cc_peak_i[0] < 2*transfer_points[1]:
-                            # DF = ((peak_i[0] / cc_peak_i[0]) ** 2 - (1 / 2) ** 2) / (1 - (1 / 2) ** 2)
                             DF = ((peak_i[0] / cc_peak_i[0]) - (1 / 2)) / (1 - (1 / 2))
                             cc_transfer = True
                     else:
@@ -501,19 +501,17 @@ class MoltenSaltPDF:
 
                 b_KF = np.zeros(len(transfer_points))
                 b_NI = np.zeros(len(transfer_points))
-                b_PC = np.zeros(len(transfer_points))
-                b_SRO = np.zeros(len(transfer_points))
-                #b_CS = np.zeros(len(transfer_points))   # Charge screening from anion density
+                b_PH = np.zeros(len(transfer_points))
 
                 # Bond strength/diffusion factor: How well ideal recipient can receive energy
                 KF = (abs(peak_i[1]-minima_i[1])/peak_i[1]) 
                 # Non-ideal recipient factor: Probability of energy transfer to ideal recipient
                 NI = (y_weighted_ca_i[transfer_points_indices[1]]/y_combined[transfer_points_indices[1]]) # First transfer
-                # Phonon transfer factor: Probability of succeeding ideal recipient in structure
+                # Phonon transfer factor: Probability of vibrational mode coupling in structure
                 PH = conc_ca_i/sum_conc_ca 
 
-                # Relative transfer participation of pair
-                RTE = c_ca_i/sum_c_ca_j
+                # Relative participation of pair, by fraction of cation-anion pairs present
+                ca_frac = c_ca_i/sum_c_ca_j
 
                 next_not_last = True
                 for i in range(0,len(transfer_points)):
@@ -525,26 +523,6 @@ class MoltenSaltPDF:
 
                     if i == 0:           # Assume all energy travels minimum distance
                         continue
-
-                    # if i % 2 == 1:      # Anion-to-cation transfer (ca peak)
-                    #     if y_combined[r_i_next] == 0 and next_not_last:
-                    #         PH = 1
-                    #     elif next_not_last:
-                    #         PH = y_weighted_cc_i[r_i_next] / y_weighted_cc_total[r_i_next]
-                    #     else:
-                    #         PH = 0
-                    # else:               # Cation-to-anion transfer (cc peak)
-                    #     if y_combined[r_i_next] == 0 and next_not_last:
-                    #         PH = 1
-                    #     elif next_not_last:
-                    #         PH = y_weighted_ca_i[r_i_next] / y_weighted_ca_total[r_i_next]
-                    #     else:
-                    #         PH = 0
-                    # PHi = PH + (1 - PH)*0.5  # Effective phonon transfer probability considering bond angle from 180-90
-
-                    # b_KF[i] += 1 - KF
-                    # b_NI[i] += 1 - NI
-                    # b_PC[i] += 1 - PHi
 
                     if i % 2 == 1:      # Anion-to-cation transfer
                         if y_combined[r_i] == 0:
@@ -565,41 +543,17 @@ class MoltenSaltPDF:
 
                     b_KF[i] += 1 - KF
                     b_NI[i] += 1 - NI
-                    b_PC[i] += 1 - PH_f
-
-                    # if i % 2 == 1:      # Anion-to-cation transfer
-                    #     if y_combined[r_i] == 0:
-                    #         b_NI[i] += 0
-                    #     else:
-                    #         b_NI[i] += 1 - (y_weighted_ca_i[r_i]/y_combined[r_i])
-                    #     if y_combined[r_i_next] == 0 and next_not_last:
-                    #         b_PC[i] += 0
-                    #     elif next_not_last:
-                    #         b_PC[i] += 1 - y_weighted_cc_i[r_i_next] / y_combined[r_i_next]
-                    #     else:
-                    #         b_PC[i] += 1
-                    # else:               # Cation-to-anion transfer
-                    #     if y_combined[r_i] == 0:
-                    #         b_NI[i] += 0
-                    #     else:
-                    #         b_NI[i] += 1 - (y_weighted_cc_i[r_i]/y_combined[r_i])
-                    #     if y_combined[r_i_next] == 0 and next_not_last:
-                    #         b_PC[i] += 0
-                    #     elif next_not_last:
-                    #         b_PC[i] += 1 - y_weighted_ca_i[r_i_next] / y_weighted_ca_total[r_i_next]
-                    #     else:
-                    #         b_PC[i] += 1
+                    b_PH[i] += 1 - PH_f
 
                     # Ensure b_factors are within [0, 1]
                     b_KF[i] = min(max(b_KF[i], 0), 1)
                     b_NI[i] = min(max(b_NI[i], 0), 1)
-                    b_PC[i] = min(max(b_PC[i], 0), 1)
-                    b_SRO[i] = min(max(b_SRO[i], 0), 1)
+                    b_PH[i] = min(max(b_PH[i], 0), 1)
 
                 beta_i = np.zeros(len(transfer_points))
                 beta_i_integral = 0#np.zeros(len(transfer_points))
 
-                b_array = [b_KF,b_NI,b_PC,b_SRO]
+                b_array = [b_KF,b_NI,b_PH]
 
                 S_i = np.zeros(len(transfer_points))   # Initialize cumulative survival function
                 
@@ -618,8 +572,6 @@ class MoltenSaltPDF:
                 for k in range(0,len(transfer_points_indices)-1):
                     beta_i_integral += beta_i[k]*(transfer_points[k+1] - transfer_points[k])
                     S_i[k] = np.exp(-beta_i_integral)
-                #S_i = S_i*b_RTO[0]
-                #print(f'S_i: {S_i}')
 
                 S_i_y = np.zeros(len(x_range_i))   # Initialize S_i_y with zeros
                 # Iterate over x_range_i and assign the corresponding S_i value
@@ -631,8 +583,8 @@ class MoltenSaltPDF:
                 x_SCL_pair = np.trapezoid(S_i_y, x=x_range_i)
                 print(f'x_SCL_pair: {x_SCL_pair}')  
                 
-                weights_pair += RTE
-                weighted_SCLs += x_SCL_pair * RTE
+                weights_pair += ca_frac
+                weighted_SCLs += x_SCL_pair * ca_frac
 
                 # Store results for this ion pair
                 self.ion_pair_results[ion_pair_ca_i] = {
@@ -641,9 +593,9 @@ class MoltenSaltPDF:
                     'peak_y': peak_i[1],
                     'minima_x': minima_i[0],
                     'minima_y': minima_i[1],
-                    'transfer_factors': [b_KF, b_NI, b_PC, b_SRO],
+                    'transfer_factors': [b_KF, b_NI, b_PH],
                     'scl': x_SCL_pair,
-                    'weight': RTE,
+                    'weight': ca_frac,
                     'ion_pair_ca_i': ion_pair_ca_i,
                     'ion_pair_cc_i': ion_pair_cc_i,
                     'cc_transfer': cc_transfer,
@@ -1146,10 +1098,7 @@ def main():
     analyzer = PDFAnalyzer(save_plot_data=save_all_plot_data)
 
     # Add molten salts to analyze
-    # Example with Savgol smoothing:
-    # analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0, 
-    #                         apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)
-    
+    # with Savgol smoothing:
     analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0, 
                             apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 900K
     analyzer.add_molten_salt('PDF_78NaF-22UF4_1000_Zhang.csv',"0.78NaF-0.22UF4",'(1000K) Zhang, 2024', 1000, 0, 
@@ -1159,7 +1108,7 @@ def main():
     analyzer.add_molten_salt('PDF_78NaF-22UF4_1200_Zhang.csv',"0.78NaF-0.22UF4",'(1200K) Zhang, 2024', 1200, 0, 
                             apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1200K
     analyzer.add_molten_salt('PDF_LiCl.csv',"1.0LiCl",'Walz, 2019', 878, 4.10511)   # Walz, 2019; 878K
-    # ... (rest of the code remains the same)
+
     # # analyzer.add_molten_salt('NaCl_Lu.csv', "1.0NaCl", 'Lu, 2021', 1200, 4.48028)
     # # analyzer.add_molten_salt('PDF_KCl.csv',"1.0KCl",'Walz, 2019', 1043, 4.47675)   # Walz, 2019; 1043K
 
