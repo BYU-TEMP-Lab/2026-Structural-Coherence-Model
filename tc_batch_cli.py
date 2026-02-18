@@ -23,7 +23,7 @@ def _load_data():
     MSTDB_df = pd.read_csv('MSTDB.csv')
     TC_Measurement_df = pd.read_excel('TC_measurement_data.xlsx')
     # Match TC_calc source of SCL data
-    SCL_PDF_df = pd.read_csv('SCL_results.csv')
+    SCL_PDF_df = pd.read_csv('SCL_results_V2.csv')
     return TC_C_df, MSTDB_df, SCL_PDF_df, TC_Measurement_df
 
 
@@ -431,7 +431,7 @@ def plot_tc_cli(
         pass
 
     # Prepare optional SCL CSV swap to force internal CSV readers to use the matched row
-    scl_csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'SCL_results.csv')
+    scl_csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'SCL_results_V2.csv')
     scl_backup_path = None
     if scl_row is not None and os.path.exists(scl_csv_path):
         try:
@@ -440,9 +440,9 @@ def plot_tc_cli(
             shutil.copy2(scl_csv_path, scl_backup_path)
             # Write a one-row CSV with the matched SCL row
             pd.DataFrame([scl_row]).to_csv(scl_csv_path, index=False)
-            print(f"Temporarily swapped SCL_results.csv to matched row for {scl_composition_with_source}")
+            print(f"Temporarily swapped SCL_results_V2.csv to matched row for {scl_composition_with_source}")
         except Exception as e:
-            print(f"Warning: failed to swap SCL_results.csv: {e}")
+            print(f"Warning: failed to swap SCL_results_V2.csv: {e}")
 
     # Aggregations like GUI
     model_results_store: Dict[str, Tuple[np.ndarray, Union[np.ndarray, Dict[str, np.ndarray]]]] = {}
@@ -545,9 +545,9 @@ def plot_tc_cli(
         if scl_backup_path and os.path.exists(scl_backup_path):
             try:
                 shutil.move(scl_backup_path, scl_csv_path)
-                print("Restored original SCL_results.csv")
+                print("Restored original SCL_results_V2.csv")
             except Exception as e:
-                print(f"Warning: failed to restore SCL_results.csv: {e}")
+                print(f"Warning: failed to restore SCL_results_V2.csv: {e}")
 
     # MSTDB-TP lines (optional)
     mstdb_records = _mstdb_lines_at_range(MSTDB_df, mstdb_formulas or [], temp_range)
@@ -1086,7 +1086,7 @@ def _save_results_to_csv(melt_results: List[Dict]):
     """Append results to the same CSV structure as TC_calc.save_results_to_csv()."""
     import csv
 
-    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_calc_results.csv')
+    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_calc_results_V2.csv')
     model_columns = list(functionlibrary().keys())
 
     # GUI header mapping

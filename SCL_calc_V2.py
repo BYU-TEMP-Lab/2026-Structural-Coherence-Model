@@ -668,39 +668,48 @@ class MoltenSaltPDF:
 
         ax = plt.gca()
         # Only create top axis for unary salts with a single endmember
-        # if len(self.fractions) == 1:  # Check if it's a unary salt
-        #     ca_pairs = [(ip, res) for ip, res in self.ion_pair_results.items() 
-        #             if res.get('type') == 'ca' and res.get('peak_x')]
-        #     max_labels = 8  # limit labels per pair to avoid horizontal collisions
-        #     # plt.figure(figsize=(4.75, 4.35))
-        #     for idx, (ion_pair, result) in enumerate(ca_pairs):
-        #         rep_peak = result.get('peak_x')
-        #         if not rep_peak or rep_peak <= 0:
-        #             continue
-        #         r_points_full = np.arange(0.0, (x_max + x_pad) + 0.5 * rep_peak, rep_peak)
-        #         r_labels_full = ["" if i == 0 else rf"$r_{{{i}}}$" for i in range(len(r_points_full))]
-        #         valid = (r_points_full >= x_start) & (r_points_full <= (x_max + x_pad))
-        #         r_points = r_points_full[valid]
-        #         r_labels = [lbl for lbl, v in zip(r_labels_full, valid) if v]
-        #         # Thin labels to avoid horizontal overlap
-        #         if len(r_points) > max_labels:
-        #             step = int(np.ceil(len(r_points) / max_labels))
-        #             r_points = r_points[::step]
-        #             r_labels = r_labels[::step]
-        #         # Create a dedicated twin axis for this pair
-        #         secax = ax.twiny()
-        #         secax.set_xlim(ax.get_xlim())
-        #         secax.set_xticks(r_points)
-        #         secax.set_xticklabels(r_labels)
-        #         # Color tick labels to match the ion pair curve
-        #         color = ion_pair_colors.get(ion_pair, 'black')
-        #         for lbl in secax.get_xticklabels():
-        #             lbl.set_color(color)
-        #         # Styling: no axis label/spine, no tick lines, and offset pad to avoid overlap
-        #         secax.set_xlabel("")
-        #         if 'top' in secax.spines:
-        #             secax.spines['top'].set_visible(False)
-        #         secax.tick_params(axis='x', which='major', length=5, width=1.25, colors=color, pad=6 + 12 * idx)
+        if len(self.fractions) == 1:  # Check if it's a unary salt
+            # FIX: Check .type from self.ion_pairs, not from the results dict
+            ca_pairs = [(ip, res) for ip, res in self.ion_pair_results.items() 
+                        if self.ion_pairs[ip].type == 'ca' and res.get('peak_x')]
+            
+            max_labels = 8  # limit labels per pair to avoid horizontal collisions
+            
+            for idx, (ion_pair, result) in enumerate(ca_pairs):
+                rep_peak = result.get('peak_x')
+                if not rep_peak or rep_peak <= 0:
+                    continue
+                
+                # Calculate points based on peak distance (ideal transfer steps)
+                r_points_full = np.arange(0.0, (x_max + x_pad) + 0.5 * rep_peak, rep_peak)
+                r_labels_full = ["" if i == 0 else rf"$r_{{{i}}}$" for i in range(len(r_points_full))]
+                
+                valid = (r_points_full >= x_start) & (r_points_full <= (x_max + x_pad))
+                r_points = r_points_full[valid]
+                r_labels = [lbl for lbl, v in zip(r_labels_full, valid) if v]
+                
+                # Thin labels to avoid horizontal overlap
+                if len(r_points) > max_labels:
+                    step = int(np.ceil(len(r_points) / max_labels))
+                    r_points = r_points[::step]
+                    r_labels = r_labels[::step]
+                
+                # Create a dedicated twin axis for this pair
+                secax = ax.twiny()
+                secax.set_xlim(ax.get_xlim())
+                secax.set_xticks(r_points)
+                secax.set_xticklabels(r_labels)
+                
+                # Color tick labels to match the ion pair curve
+                color = ion_pair_colors.get(ion_pair, 'black')
+                for lbl in secax.get_xticklabels():
+                    lbl.set_color(color)
+                
+                # Styling: no axis label/spine, no tick lines, and offset pad to avoid overlap
+                secax.set_xlabel("")
+                if 'top' in secax.spines:
+                    secax.spines['top'].set_visible(False)
+                secax.tick_params(axis='x', which='major', length=5, width=1.25, colors=color, pad=6 + 12 * idx)
 
         # ax.legend(ncol=2, loc='upper right', bbox_to_anchor=(1.0, 1.0), facecolor='white', framealpha=1)
         legend = ax.legend(
