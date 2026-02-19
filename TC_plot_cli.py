@@ -23,7 +23,7 @@ def _load_data():
     MSTDB_df = pd.read_csv('MSTDB.csv')
     TC_Measurement_df = pd.read_excel('TC_measurement_data.xlsx')
     # Match TC_calc source of SCL data
-    SCL_PDF_df = pd.read_csv('SCL_results_V2.csv')
+    SCL_PDF_df = pd.read_csv('SCL_results.csv')
     return TC_C_df, MSTDB_df, SCL_PDF_df, TC_Measurement_df
 
 
@@ -294,7 +294,7 @@ def plot_tc_cli(
     use_available_data: bool = True,
     save_results_csv: bool = False,
     show_plot: bool = False,
-    output_dir: str = 'Comparison_Plot_Figs',
+    output_dir: str = 'TC_plots',
     show_diff_comp_in_legend: bool = True,
     export_plot_data_csv: bool = False,
     *,
@@ -398,6 +398,13 @@ def plot_tc_cli(
     model_compositions = set()
     experimental_sources = set()
 
+    # Define consistent colors for models
+    model_colors = {
+        'KTM': '#377eb8',      # Blue
+        'SCM': '#e41a1c',      # Red  
+        'PGM': '#4daf4a'       # Green
+    }
+    
     # Colors and markers for experimental data points
     num_colors = len(methods) + (len(mstdb_formulas) if mstdb_formulas else 0) + (len(measurement_sources) if measurement_sources else 0)
     palette_local = shared_palette or sns.color_palette('deep', max(num_colors, 1))
@@ -431,7 +438,7 @@ def plot_tc_cli(
         pass
 
     # Prepare optional SCL CSV swap to force internal CSV readers to use the matched row
-    scl_csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'SCL_results_V2.csv')
+    scl_csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'SCL_results.csv')
     scl_backup_path = None
     if scl_row is not None and os.path.exists(scl_csv_path):
         try:
@@ -440,9 +447,9 @@ def plot_tc_cli(
             shutil.copy2(scl_csv_path, scl_backup_path)
             # Write a one-row CSV with the matched SCL row
             pd.DataFrame([scl_row]).to_csv(scl_csv_path, index=False)
-            print(f"Temporarily swapped SCL_results_V2.csv to matched row for {scl_composition_with_source}")
+            print(f"Temporarily swapped SCL_results.csv to matched row for {scl_composition_with_source}")
         except Exception as e:
-            print(f"Warning: failed to swap SCL_results_V2.csv: {e}")
+            print(f"Warning: failed to swap SCL_results.csv: {e}")
 
     # Aggregations like GUI
     model_results_store: Dict[str, Tuple[np.ndarray, Union[np.ndarray, Dict[str, np.ndarray]]]] = {}
@@ -504,6 +511,56 @@ def plot_tc_cli(
             if composition_label_override is not None:
                 model_label = composition_label_override
 
+            # Determine base model and if it's Mix Data
+            base_model = None
+            is_mix_data = 'Mix Data' in method
+            if 'Gheribi-KT24' in method:
+                base_model = 'KTM'
+            elif 'Present Model' in method:
+                base_model = 'SCM'
+            elif 'Zhao-PGM' in method:
+                base_model = 'PGM'
+            
+            # Special handling for multi-composition plots: use different colors per composition
+            is_multi_composition_plot = composition_label_override is not None
+            if is_multi_composition_plot:
+                # For multi-composition plots, use palette colors instead of consistent model colors
+                model_color = palette_local[color_i % len(palette_local)]
+                color_i += 1
+                line_style = '-'  # Always solid for multi-composition plots
+            else:
+                # Regular single-composition plot logic
+                # Check if both regular and Mix Data versions of this specific model family are being plotted
+                both_versions_plotted = False
+                if base_model:
+                    # Look for both versions of this model family in methods list
+                    if base_model == 'KTM':
+                        regular_exists = any('Gheribi-KT24' in method and 'Mix Data' not in method for method in methods)
+                        mix_exists = any('Gheribi-KT24, Mix Data' in method for method in methods)
+                    elif base_model == 'SCM':
+                        regular_exists = any('Present Model' in method and 'Mix Data' not in method for method in methods)
+                        mix_exists = any('Present Model, Mix Data' in method for method in methods)
+                    elif base_model == 'PGM':
+                        regular_exists = any('Zhao-PGM' in method and 'Mix Data' not in method for method in methods)
+                        mix_exists = any('Zhao-PGM, Mix Data' in method for method in methods)
+                    else:
+                        regular_exists = False
+                        mix_exists = False
+                    both_versions_plotted = regular_exists and mix_exists
+                
+                # Use consistent color for model, fallback to palette if not recognized
+                if base_model and base_model in model_colors:
+                    model_color = model_colors[base_model]
+                else:
+                    model_color = palette_local[color_i % len(palette_local)]
+                    color_i += 1
+
+                # Determine line style: if both versions of this model family are plotted, Mix Data is solid, regular is dashed
+                if both_versions_plotted:
+                    line_style = '-' if is_mix_data else '--'
+                else:
+                    line_style = '-'  # solid line when only one version of this model family is plotted
+
             marker = series_marker
             markevery = None
             if marker:
@@ -514,7 +571,9 @@ def plot_tc_cli(
 
             plot_kwargs = {
                 'label': model_label,
-                'color': palette_local[color_i % len(palette_local)]
+                'color': model_color,
+                'linestyle': line_style,
+                'linewidth': 2.0
             }
             if marker:
                 plot_kwargs['marker'] = marker
@@ -545,9 +604,9 @@ def plot_tc_cli(
         if scl_backup_path and os.path.exists(scl_backup_path):
             try:
                 shutil.move(scl_backup_path, scl_csv_path)
-                print("Restored original SCL_results_V2.csv")
+                print("Restored original SCL_results.csv")
             except Exception as e:
-                print(f"Warning: failed to restore SCL_results_V2.csv: {e}")
+                print(f"Warning: failed to restore SCL_results.csv: {e}")
 
     # MSTDB-TP lines (optional)
     mstdb_records = _mstdb_lines_at_range(MSTDB_df, mstdb_formulas or [], temp_range)
@@ -566,38 +625,35 @@ def plot_tc_cli(
     experimental_at_melt_vals: List[float] = []
     experimental_at_min_temp_vals: List[float] = []
     exp_ref_list: List[str] = []
+    min_measured_temp: Optional[float] = None
     if measurement_sources:
-        (
-            used_srcs,
-            tc_vals,
-            avg_tc,
-            global_min_meas_temp,
-            tc_vals_at_min,
-        ) = _experimental_tc_at_melt_from_measurements(
-            TC_Measurement_df, measurement_sources, T_melt
-        )
-        experimental_at_melt_vals = tc_vals
-        experimental_at_min_temp_vals = tc_vals_at_min
-        exp_ref_list = used_srcs
-        min_measured_temp = global_min_meas_temp
+        used_srcs, tc_vals, avg_tc, global_min, _ = _experimental_tc_at_melt_from_measurements(TC_Measurement_df, measurement_sources, T_melt)
+        
+        if tc_vals:
+            experimental_at_melt_vals = tc_vals
+            min_measured_temp = global_min
+            # Calculate experimental values at min measured temp
+            if min_measured_temp is not None:
+                used_srcs, tc_vals, _, global_min, _ = _experimental_tc_at_melt_from_measurements(TC_Measurement_df, measurement_sources, T_melt)
+                experimental_at_min_temp_vals = [float(fit(min_measured_temp)) for fit in [np.poly1d(np.polyfit(TC_Measurement_df[TC_Measurement_df['Source'] == src].iloc[:, 3].astype(float).values, TC_Measurement_df[TC_Measurement_df['Source'] == src].iloc[:, 4].astype(float).values, 1)) for src in used_srcs]]
+        
+        # Use high-contrast colors suitable for professional papers, avoiding model colors (red, blue, green)
+        exp_colors = ['#9467bd', '#ff7f0e', '#4daf4a', '#17becf','#8c564b', '#e377c2', '#7f7f7f', '#bcbd22',  '#ff9896', '#c5b0d5']
+        exp_markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '*', 'h', '+']
 
-        # Plot points and their linear fits
-        for src in used_srcs:
+        for i, src in enumerate(used_srcs):
             rows = TC_Measurement_df[TC_Measurement_df['Source'] == src]
-            T = rows.iloc[:, 3].astype(float).values
-            TC = rows.iloc[:, 4].astype(float).values
-            coeffs = np.polyfit(T, TC, 1)
-            linear_fit = np.poly1d(coeffs)
-            x_fit = np.linspace(min(T), max(T), 100)
-            color = palette_local[color_i % len(palette_local)] if palette_local else None
-
-            # Extract composition, author name, and year from source
-            # Format: "composition (author, year)"
-            exp_composition_str = None
-            author_name = "Unknown"
-            year = ""
+            T_exp, TC_exp = rows.iloc[:, 3].astype(float).values, rows.iloc[:, 4].astype(float).values
+            coeffs = np.polyfit(T_exp, TC_exp, 1)
+            fit = np.poly1d(coeffs)
+            x_fit = np.linspace(min(T_exp), max(T_exp), 100)
+            
+            # Parse experimental source label
             md_prefix = ""
-
+            author_name = ""
+            year = ""
+            exp_composition_str = ""
+            
             if '(' in src and ')' in src:
                 # Split composition and (author, year) parts
                 parts = src.split('(', 1)
@@ -626,57 +682,19 @@ def plot_tc_cli(
                 if 'MD' in src:
                     md_prefix = "MD: "
 
-            # Check if experimental composition matches title composition (order-independent)
-            composition_matches = False
-            if exp_composition_str:
-                try:
-                    _, _, exp_comp_label = _parse_composition(exp_composition_str)
-                    # Compare normalized labels (both should be alphabetically sorted)
-                    composition_matches = (exp_comp_label == comp_label)
-                except:
-                    composition_matches = False
-
             # Base label (without composition), with optional MD prefix
             base_label = f"{md_prefix}{author_name}{year}".strip()
-
-            # Check if we need to show composition in legend
-            # Count unique compositions across all data sources (models + experimental)
-            all_compositions = set()
-            all_compositions.update(model_compositions)
-
-            # Add experimental compositions (normalized)
-            exp_compositions = set()
-            for src in used_srcs:
-                if '(' in src and ')' in src:
-                    exp_comp_str = src.split('(')[0].strip()
-                    try:
-                        _, _, exp_comp_label = _parse_composition(exp_comp_str)
-                        exp_compositions.add(exp_comp_label)
-                    except:
-                        exp_compositions.add(exp_comp_str)
-
-            all_compositions.update(exp_compositions)
-
-            # Show composition in legend only if toggle is True and we have multiple different compositions
-            show_composition = show_diff_comp_in_legend and (len(all_compositions) > 1)
-
-            if show_composition:
-                # Show composition in legend to distinguish - use experimental composition if different
-                if composition_matches:
-                    # Same composition as title, don't need to show it
-                    ax.scatter(T, TC, label=base_label, color=color, marker=exp_markers[marker_i % len(exp_markers)])
-                    ax.plot(x_fit, linear_fit(x_fit), color=color, linestyle='dotted', alpha=0.8)
-                else:
-                    # Different composition, show the experimental composition
-                    ax.scatter(T, TC, label=f"{base_label} ({exp_composition_str})", color=color, marker=exp_markers[marker_i % len(exp_markers)])
-                    ax.plot(x_fit, linear_fit(x_fit), color=color, linestyle='dotted', alpha=0.8)
-            else:
-                # Use the label we already determined (which handles composition correctly)
-                ax.scatter(T, TC, label=base_label, color=color, marker=exp_markers[marker_i % len(exp_markers)])
-                ax.plot(x_fit, linear_fit(x_fit), color=color, linestyle='dotted', alpha=0.8)
+            
+            # Use larger symbols with distinct colors and black edges for cleaner look
+            label = base_label
+            ax.scatter(T_exp, TC_exp, label=label, color=exp_colors[i % len(exp_colors)], 
+                      marker=exp_markers[i % len(exp_markers)], s=80, edgecolors='black', 
+                      linewidths=0.6, zorder=5, alpha=0.5)
+            ax.plot(x_fit, fit(x_fit), color=exp_colors[i % len(exp_colors)], 
+                   linestyle=':', linewidth=2.0, alpha=1, zorder=4)
 
             experimental_sources.add(comp_label)
-            color_i += 1
+            exp_ref_list.append(src)
             marker_i += 1
 
         # Model predictions at minimum measured temperature across all measurement sets
@@ -878,7 +896,7 @@ def _finalize_plot(
         'columnspacing': 0.8,
         'handlelength': 1.5,
         'labelspacing': 0.3,
-        'fontsize': 13.75,
+        'fontsize': 13.5,
     }
     if legend_kwargs:
         legend_params.update(legend_kwargs)
@@ -914,7 +932,7 @@ def plot_multi_composition_cli(
     use_available_data: bool = True,
     save_results_csv: bool = False,
     show_plot: bool = False,
-    output_dir: str = 'Comparison_Plot_Figs',
+    output_dir: str = 'TC_plots',
     show_diff_comp_in_legend: bool = True,
     export_plot_data_csv: bool = False,
     figure_label: Optional[str] = None,
@@ -1053,7 +1071,7 @@ def run_many(configs: List[Dict]):
                 use_available_data=cfg.get('use_available_data', True),
                 save_results_csv=cfg.get('save_results_csv', False),
                 show_plot=cfg.get('show_plot', False),
-                output_dir=cfg.get('output_dir', 'Comparison_Plot_Figs'),
+                output_dir=cfg.get('output_dir', 'TC_plots'),
                 show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', True),
                 export_plot_data_csv=cfg.get('export_plot_data_csv', False),
                 figure_label=cfg.get('figure_label'),
@@ -1071,7 +1089,7 @@ def run_many(configs: List[Dict]):
                 use_available_data=cfg.get('use_available_data', True),
                 save_results_csv=cfg.get('save_results_csv', False),
                 show_plot=cfg.get('show_plot', False),
-                output_dir=cfg.get('output_dir', 'Comparison_Plot_Figs'),
+                output_dir=cfg.get('output_dir', 'TC_plots'),
                 show_diff_comp_in_legend=cfg.get('show_diff_comp_in_legend', True),
                 export_plot_data_csv=cfg.get('export_plot_data_csv', False),
                 figure_name_override=cfg.get('figure_label'),
@@ -1086,7 +1104,7 @@ def _save_results_to_csv(melt_results: List[Dict]):
     """Append results to the same CSV structure as TC_calc.save_results_to_csv()."""
     import csv
 
-    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_calc_results_V2.csv')
+    csv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'TC_calc_results.csv')
     model_columns = list(functionlibrary().keys())
 
     # GUI header mapping

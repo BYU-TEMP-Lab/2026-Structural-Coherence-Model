@@ -1,820 +1,520 @@
-﻿import os
+import os
 import pandas as pd
 import numpy as np
-from scipy.integrate import trapezoid
 import matplotlib.pyplot as plt
 from scipy.interpolate import interp1d
-import re
-from mendeleev import element
 from scipy.signal import find_peaks, savgol_filter
 from datetime import datetime
-from scipy.ndimage import gaussian_filter1d
+import re
+from mendeleev import element
 import csv
 
+# ==========================================
+# 1. Helper Functions
+# ==========================================
+
 def standardize_ion_pair(ion_pair):
-    # Convert to string if it's not already
+    """Standardizes ion pair strings (e.g., 'LiCl-KCl' -> 'Cl-Li')."""
     if not isinstance(ion_pair, str):
         ion_pair = str(ion_pair)
-    
-    # Split the ion pair into two parts
     parts = ion_pair.split('-')
     if len(parts) != 2:
-        raise ValueError(f"Invalid ion pair format: {ion_pair}. Expected format: 'A-B'")
+        raise ValueError(f"Invalid ion pair format: {ion_pair}")
     
-    # Extract elements from each part (handling cases like 'LiCl' -> 'Li' and 'Cl')
     def extract_elements(compound):
-        # This regex matches element symbols (1-2 letters) followed by optional numbers
         elements = re.findall(r'([A-Z][a-z]?\d*)', compound)
-        return [re.sub(r'\d', '', el) for el in elements]  # Remove any numbers
+        return [re.sub(r'\d', '', el) for el in elements]
     
-    # Get elements from each part
-    elements1 = extract_elements(parts[0])
-    elements2 = extract_elements(parts[1])
+    elems1 = extract_elements(parts[0])
+    elems2 = extract_elements(parts[1])
     
-    if not elements1 or not elements2:
-        raise ValueError(f"Could not extract elements from ion pair: {ion_pair}")
+    if not elems1 or not elems2:
+        raise ValueError(f"Could not extract elements from: {ion_pair}")
+        
+    el1, el2 = element(elems1[0]), element(elems2[0])
+    # Default to 0 if oxidation states are missing
+    state1 = el1.oxistates[0] if el1.oxistates else 0
+    state2 = el2.oxistates[0] if el2.oxistates else 0
     
-    element1 = elements1[0]
-    element2 = elements2[0]
-    
-    # Get element properties
-    el1 = element(element1)
-    el2 = element(element2)
-    el1_states = el1.oxistates or [0]  # Default to 0 if no oxidation states
-    el2_states = el2.oxistates or [0]  # Default to 0 if no oxidation states
-
-    # Determine if the elements are cations or anions
-    if el1_states[0] > 0 and el2_states[0] < 0:
-        return f"{element1}-{element2}"  # cation-anion
-    elif el1_states[0] < 0 and el2_states[0] > 0:
-        return f"{element2}-{element1}"  # anion-cation
-    elif el1_states[0] > 0 and el2_states[0] > 0:
-        return '-'.join(sorted([element1, element2]))  # cation-cation, sorted alphabetically
+    # Sort cation-anion
+    if state1 > 0 and state2 < 0:
+        return f"{elems1[0]}-{elems2[0]}"
+    elif state1 < 0 and state2 > 0:
+        return f"{elems2[0]}-{elems1[0]}"
     else:
-        # If both are cations or both are anions, sort alphabetically
-        return '-'.join(sorted([element1, element2]))
-    
-# Function to interpolate splines over a common x-range
-def interval_cut(splines, filtered_crossing_points, x_range, num_pnts_interval):
-    for ion_pair in splines.keys():
-        splines[ion_pair]['intervals'] = []  # Add a new key for intervals
-
-    for index, (start, end) in enumerate(zip(filtered_crossing_points[:-1], filtered_crossing_points[1:])):
-        x_interval = np.linspace(x_range[start], x_range[end], num_pnts_interval)
-        for ion_pair, spline in splines.items():
-            y_interpolated = spline['spline'](x_interval)
-            splines[ion_pair]['intervals'].append({'interval_number': index, 'x': x_interval, 'y': y_interpolated})
-
-    return splines
-
-def extract_and_average(x, y, x_0, width):
-    """
-    Extract values from y that span a width centered at x_0 and compute their average.
-
-    Parameters:
-    - x: numpy array of x-values
-    - y: numpy array of y-values
-    - x_0: center point
-    - width: total width of the range to consider
-
-    Returns:
-    - average of the extracted y-values
-    """
-    # Calculate the range
-    x_min = x_0 - width / 2
-    x_max = x_0 + width / 2
-
-    # Create a mask for the range
-    mask = (x >= x_min) & (x <= x_max)
-
-    # Extract the y-values within the range
-    y_extracted = y[mask]
-
-    # Compute the average
-    average = np.mean(y_extracted) if len(y_extracted) > 0 else None
-
-    return average
+        # Sort alphabetical for like-charged
+        return '-'.join(sorted([elems1[0], elems2[0]]))
 
 def format_composition_with_subscripts(composition_str):
-    """
-    Format composition string with proper subscript notation for chemical formulas.
-    Converts numbers after element symbols to subscripts.
-    Example: "0.5NaCl-0.5UCl3" -> "0.5NaCl-0.5UCl₃"
-    """
-    import re
-
-    def format_compound(compound):
-        # Pattern to match element symbol followed by numbers
-        # This matches patterns like: NaCl2, UCl3, MgF2, etc.
-        pattern = r'([A-Z][a-z]?)(\d*)'
-        def replace_with_subscript(match):
-            element = match.group(1)
-            number = match.group(2)
-            if number:
-                # Convert number to subscript using Unicode subscript characters
-                subscript_number = ''.join([f'₀₁₂₃₄₅₆₇₈₉'[int(digit)] for digit in number])
-                return f"{element}{subscript_number}"
-            return element
-
-        return re.sub(pattern, replace_with_subscript, compound)
-
-    # Split by '-' and format each compound
-    compounds = composition_str.split('-')
-    formatted_compounds = [format_compound(comp) for comp in compounds]
-
-    return '-'.join(formatted_compounds)
+    """Format composition string for plots (e.g., UCl3 -> UCl₃)."""
+    def replace_with_subscript(match):
+        el = match.group(1)
+        num = match.group(2)
+        if num:
+            subs = ''.join([f'₀₁₂₃₄₅₆₇₈₉'[int(d)] for d in num])
+            return f"{el}{subs}"
+        return el
     
-def select_elements_at_intervals(array, interval):    
-    selected_elements = []
-    current_index = 0
-    while current_index < len(array):
-        selected_elements.append(array[current_index])
-        # Calculate the next index by finding the closest element to the current index + interval
-        next_index = np.argmin(np.abs(array - (array[current_index] + interval)))
-        if next_index <= current_index:
-            break
-        current_index = next_index
-    return selected_elements
+    parts = composition_str.split('-')
+    formatted = [re.sub(r'([A-Z][a-z]?)(\d*)', replace_with_subscript, p) for p in parts]
+    return '-'.join(formatted)
 
-class IonPairPDF:
-    def __init__(self, ion_pair, x_values, y_values, weights):
-        self.ion_pair = standardize_ion_pair(ion_pair)  # Standardize the ion pair name
-        self.x = np.array(x_values)
-        self.y = np.array(y_values)
-        self.weights = weights  # Store the weights
-        self.spline = self.create_spline()
-        self.type = self.type_ion()
-        self.peak,self.minima = self.find_first_peak_and_minimum(self.x, self.y, any_type=False)
-
-    def create_spline(self):
-        return interp1d(self.x, self.y, kind='linear', bounds_error=False, fill_value=0)
+def parse_composition(comp_str):
+    """Parses composition string into fractions and ion counts."""
+    # 1. Parse Molar Fractions
+    fractions = {}
+    components = comp_str.split('-')
     
-    def type_ion(self):
-        element1, element2 = self.ion_pair.split('-')
-        el1 = element(element1)
-        el2 = element(element2)
-        el1_states = el1.oxistates
-        el2_states = el2.oxistates
-        if el1_states[0] > 0 and el2_states[0] < 0:    #is_cation_anion:
-            return "ca"
-        elif el1_states[0] < 0 and el2_states[0] > 0:  # is_anion_cation:
-            return "ac"
-        elif (el1_states[0] > 0 and el2_states[0] > 0) and el1 == el2 :  # is_similar_cation_cation:
-            return "cc_sim"
-        elif (el1_states[0] > 0 and el2_states[0] > 0) and el1!= el2 :  # is_different_cation_cation:
-            return "cc_diff"
-        elif (el1_states[0] < 0 and el2_states[0] < 0) and el1 == el2 :  # is_similar_anion_anion:
-            return "aa_sim"
-        elif (el1_states[0] < 0 and el2_states[0] < 0) and el1!= el2 :  # is_different_anion_anion:
-            return "aa_diff"
+    # Use regex to find number at start of string
+    for comp in components:
+        match = re.match(r"([0-9.]+)?([A-Za-z0-9]+)", comp)
+        if match:
+            frac_str, salt = match.groups()
+            frac = float(frac_str) if frac_str else 1.0 # Default to 1.0 if no number
+            fractions[salt] = frac
+
+    # 2. Parse Ion Counts
+    ion_counts = {}
+    # Re-extract salts to handle string parsing purely
+    all_salts_matches = re.findall(r'([0-9.]*)([A-Z][a-z]?\d*[A-Z]?[a-z]?\d*)', comp_str)
+    
+    for _, salt in all_salts_matches:
+        if not salt: continue
+        elements = re.findall(r'([A-Z][a-z]?)([0-9]*)', salt)
+        i_counts = {}
+        for el, count in elements:
+            cnt = int(count) if count else 1
+            i_counts[el] = i_counts.get(el, 0) + cnt
+        ion_counts[salt] = i_counts
+
+    # Sort string for consistency
+    def get_cation_atomic_number(s):
+        try:
+            elems = re.findall(r'([A-Z][a-z]?)', s)
+            if elems: return element(elems[0]).atomic_number
+        except: pass
+        return 999
         
-    def find_first_peak_and_minimum(self, x, y, any_type=False):
-        if self.type == "ca" or any_type == True:
-            # Get the weight for this ion pair
-            weight = self.weights.get(self.ion_pair, 1.0)  # Default to 1.0 if not found
+    sorted_salts = sorted(fractions.keys(), key=get_cation_atomic_number)
+    sorted_comp_str = '-'.join([f"{fractions[s]}{s}" for s in sorted_salts])
+    
+    return fractions, ion_counts, sorted_comp_str
+
+# ==========================================
+# 2. Core Classes
+# ==========================================
+
+class IonPairData:
+    """Stores PDF data and properties for a single ion pair."""
+    def __init__(self, name, x, y, weight):
+        self.name = name
+        self.x = x
+        self.y = y
+        self.weight = weight
+        # Create spline for standard grid evaluation
+        self.spline = interp1d(x, y, kind='linear', bounds_error=False, fill_value=0)
+        self.type = self._determine_type()
+        # peak/minima will be set after common grid is created
+        self.peak = (None, None)
+        self.minima = (None, None)
+
+    def _determine_type(self):
+        try:
+            parts = self.name.split('-')
+            el1, el2 = element(parts[0]), element(parts[1])
+            s1 = el1.oxistates[0] if el1.oxistates else 0
+            s2 = el2.oxistates[0] if el2.oxistates else 0
             
-            # Weight the y values
-            y_weighted = y * weight
+            if s1 > 0 and s2 < 0: return "ca"
+            if s1 < 0 and s2 > 0: return "ca" 
+            if s1 > 0 and s2 > 0: return "cc_sim" if parts[0] == parts[1] else "cc_diff"
+            if s1 < 0 and s2 < 0: return "aa"
+        except:
+            pass
+        return "other"
 
-            # Find all significant peaks with some minimum prominence and width
-            # prominence: minimum height difference between peak and its lowest contour line
-            # width: minimum width of the peak in samples
-            # distance: minimum distance between peaks in samples (about 0.5 Angstrom)
-            x_spacing = np.mean(np.diff(x))  # average x spacing
-            min_peak_distance = int(0.5 / x_spacing)  # convert 0.5 Angstrom to samples
+    def find_features_on_grid(self, x_grid):
+        """Find peak and minima after interpolating to common grid."""
+        # Get weighted values on the common grid
+        y_grid = self.spline(x_grid) * self.weight
+        
+        # Heuristics for peak finding
+        x_spacing = x_grid[1] - x_grid[0]  # Uniform spacing on common grid
+        min_dist = int(0.5 / x_spacing)
+        
+        peaks, _ = find_peaks(y_grid, prominence=0.1*np.max(y_grid) if np.max(y_grid) > 0 else 0, distance=min_dist, width=2)
+        
+        peak_pt = (None, None)
+        min_pt = (None, None)
+        
+        if len(peaks) > 0:
+            p_idx = peaks[0]
+            peak_pt = (x_grid[p_idx], y_grid[p_idx])
             
-            peaks, properties = find_peaks(
-                y_weighted,
-                prominence=0.1 * np.max(y_weighted),  # at least 10% of max height
-                width=2,  # minimum width of 2 samples
-                distance=min_peak_distance  # minimum distance between peaks
-            )
-
-            # If we found peaks, take the first one
-            if len(peaks) > 0:
-                first_peak_index = peaks[0]
-                first_peak_x = x[first_peak_index]
-                first_peak_y = y_weighted[first_peak_index]
+            # Find minima after peak
+            y_after = y_grid[p_idx:]
+            mins, _ = find_peaks(-y_after, prominence=0.01*np.max(y_grid), distance=min_dist)
+            if len(mins) > 0:
+                m_idx = mins[0] + p_idx
+                min_pt = (x_grid[m_idx], y_grid[m_idx])
             else:
-                first_peak_x, first_peak_y = None, None
-
-            # Find the first minimum after the first peak
-            if first_peak_x is not None:
-                after_peak = y_weighted[first_peak_index:]
-                minima, _ = find_peaks(
-                    -after_peak,
-                    prominence=0.1 * np.max(y_weighted),
-                    width=2,
-                    distance=min_peak_distance
-                )
-                if len(minima) > 0:
-                    first_min_index = minima[0] + first_peak_index
-                    first_min_x = x[first_min_index]
-                    first_min_y = y_weighted[first_min_index]
-                else:
-                    first_min_x, first_min_y = None, None
-            else:
-                first_min_x, first_min_y = None, None
-        else:
-            # For non-cation-anion pairs, return None
-            first_peak_x, first_peak_y = None, None
-            first_min_x, first_min_y = None, None
-
-        return (first_peak_x, first_peak_y), (first_min_x, first_min_y)
-
+                # If no clear minima, find global min in reasonable range (up to 2*peak)
+                search_end = min(len(x_grid)-1, int(p_idx + (2.0/x_spacing)))
+                if search_end > p_idx:
+                    m_idx = p_idx + np.argmin(y_grid[p_idx:search_end])
+                    min_pt = (x_grid[m_idx], y_grid[m_idx])
+        
+        self.peak = peak_pt
+        self.minima = min_pt
+        return peak_pt, min_pt
 
 class MoltenSaltPDF:
-    def __init__(self, comp, pdf_file, source, temp, gamma_bc, apply_savgol=False, savgol_window_length=11, savgol_polyorder=3):
-        self.comp = comp
+    def __init__(self, pdf_file, comp_str, source, temp, gamma_bc, apply_savgol=False, savgol_window_length=11, savgol_polyorder=3):
+        self.original_comp_str = comp_str
         self.source = source
         self.temp = temp
         self.gamma_bc = gamma_bc
         self.apply_savgol = apply_savgol
-        self.savgol_window_length = savgol_window_length
-        self.savgol_polyorder = savgol_polyorder
-        self.composition, self.ion_counts, self.comp = self.parse_composition(comp)        
-        self.weights = self.calculate_weights()
-        self.ion_pairs = self.load_pdf_data(pdf_file)
-        self.interpolated_splines, self.weighted_splines, self.x_new = self.interpolate_data()
-        self.plot_data = []  # Store plot data here
-        self.ion_pair_results = {}  # Store ion pair analysis results
-
-    def load_pdf_data(self, pdf_file):
-        folder_name = "RDF_CSV"
-        # Use the directory where the script is located
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        rdf_plots_folder = os.path.join(script_dir, folder_name)
-        file_path = os.path.join(rdf_plots_folder, pdf_file)
+        self.savgol_params = (savgol_window_length, savgol_polyorder)
         
-        df = pd.read_csv(file_path, header=None)
-        ion_pairs = {}
+        # Parse Composition
+        self.fractions, self.ion_counts, self.comp = parse_composition(comp_str)
+        self.weights = self._calculate_weights()
+        
+        # Load PDF Data
+        self.ion_pairs = self._load_pdf(pdf_file)
+        
+        # Global Grid (Interpolate all to this grid for summation)
+        self.x_grid = self._create_common_grid()
+        
+        # Find features on common grid AFTER grid is created and Savgol applied
+        for pair in self.ion_pairs.values():
+            pair.find_features_on_grid(self.x_grid)
+        
+        self.weighted_splines = self._create_weighted_splines()
+        
+        # Results Storage
+        self.plot_data = []
+        self.ion_pair_results = {}
 
-        for i in range(0, df.shape[1], 2):
-            # Get the ion pair name and handle potential NaN or non-string values
-            raw_ion_pair = df.iloc[0, i]
-            if pd.isna(raw_ion_pair):
-                continue  # Skip if the value is NaN
-            ion_pair = standardize_ion_pair(raw_ion_pair)  # Standardize the ion pair name
-            # Get and clean the data
-            x_values = df.iloc[2:, i].dropna().astype(float).values
-            y_values = df.iloc[2:, i+1].dropna().astype(float).values
-            
-            # Sort values by x
-            sort_idx = np.argsort(x_values)
-            x_sorted = x_values[sort_idx]
-            y_sorted = y_values[sort_idx]
-            
-            # Remove duplicate x-values (keep first occurrence)
-            unique_mask = np.concatenate(([True], np.diff(x_sorted) > 0))
-            x_unique = x_sorted[unique_mask]
-            y_unique = y_sorted[unique_mask]
-            
-            # Check for non-monotonic points that weren't duplicates
-            if len(x_unique) < len(x_sorted):
-                print(f"Warning: Removed {len(x_sorted) - len(x_unique)} non-monotonic points for {ion_pair}")
-            
-            # Extend x_values and y_values
-            x_extended = np.linspace(0, x_unique[0], num=int(x_unique[0]) + 1)
-            y_extended = np.zeros_like(x_extended)
-            
-            x_combined = np.concatenate((x_extended, x_unique))
-            y_combined = np.concatenate((y_extended, y_unique))
-
-            # Apply Savgol smoothing if requested
-            if self.apply_savgol:
-                # Ensure window length is odd and greater than polyorder
-                window_length = self.savgol_window_length
-                if window_length % 2 == 0:
-                    window_length += 1  # Make it odd
-                if window_length <= self.savgol_polyorder:
-                    window_length = self.savgol_polyorder + 1
-                    if window_length % 2 == 0:
-                        window_length += 1
+    def _calculate_weights(self):
+        el_conc = {}
+        for salt, frac in self.fractions.items():
+            for el, count in self.ion_counts[salt].items():
+                el_conc[el] = el_conc.get(el, 0) + frac * count
                 
-                # Only apply smoothing to the non-zero portion (avoid smoothing the extended zeros)
-                nonzero_start = len(x_extended)  # Start after the zero extension
-                if nonzero_start < len(y_combined):
-                    y_filtered = savgol_filter(
-                        y_combined[nonzero_start:], 
-                        window_length=window_length, 
-                        polyorder=self.savgol_polyorder,
-                        mode='nearest'
-                    )
-                    # Ensure PDF doesn't go below zero by clipping negative values
-                    y_filtered = np.maximum(y_filtered, 0)
-                    y_combined[nonzero_start:] = y_filtered
-                    print(f"Applied Savgol smoothing to {ion_pair}: window={window_length}, polyorder={self.savgol_polyorder}")
-
-            ion_pairs[ion_pair] = IonPairPDF(ion_pair, x_combined, y_combined, self.weights)
-
-        return ion_pairs
-
-    def parse_composition(self, composition_str):
-        components = composition_str.split('-')
-        composition = {}
-        for component in components:
-            match = re.match(r"([0-9.]+)([A-Za-z0-9]+)", component)
-            if match:
-                fraction, salt = match.groups()
-                composition[salt] = float(fraction)
+        total_conc = sum(el_conc.values())
+        rel_conc = {k: v/total_conc for k, v in el_conc.items()}
         
-        compound_split = re.findall(r'([0-9.]+)([A-Za-z0-9]+)', composition_str)
-        ion_counts = {}
-        for fraction, compound in compound_split:
-            elements = re.findall(r'([A-Z][a-z]*)([0-9]*)', compound)
-            ion_count = {}
-            for element, count in elements:
-                count = int(count) if count else 1
-                if element in ion_count:
-                    ion_count[element] += count
-                else:
-                    ion_count[element] = count
-            ion_counts[compound] = ion_count
-
-        # Function to get cation atomic number for sorting
-        def get_cation_atomic_number(salt):
-            try:
-                from mendeleev import element
-                import re
-
-                # Extract cation from salt
-                elements = re.findall(r'([A-Z][a-z]?)(\d*)', salt)
-                if elements:
-                    cation = elements[0][0]  # First element is typically the cation
-                    el = element(cation)
-                    return el.atomic_number
-            except:
-                pass
-            return 999  # Default high number for unknown elements
-
-        # Sort salts by cation atomic number instead of alphabetically
-        sorted_salts = sorted(composition.keys(), key=get_cation_atomic_number)
-        sorted_composition_str = '-'.join([f"{composition[salt]}{salt}" for salt in sorted_salts])
-
-        return composition, ion_counts, sorted_composition_str
-
-    def calculate_weights(self):
-        element_concentration = {}
-        for salt, fraction in self.composition.items():
-            for element, count in self.ion_counts[salt].items():
-                if element in element_concentration:
-                    element_concentration[element] += fraction * count
-                else:
-                    element_concentration[element] = fraction * count
-
-        total_concentration = sum(element_concentration.values())
-        rel_conc = {element: concentration / total_concentration 
-                                for element, concentration in element_concentration.items()}
-
         weights = {}
-        for ion1, conc1 in rel_conc.items():
-            for ion2, conc2 in rel_conc.items():
-                ion_pair = standardize_ion_pair(f"{ion1}-{ion2}")  # Standardize the ion pair name
-                if ion_pair in weights:
-                    weights[ion_pair] = conc1 * conc2
-                else:
-                    weights[ion_pair] = conc1 * conc2
+        for el1, c1 in rel_conc.items():
+            for el2, c2 in rel_conc.items():
+                pair = standardize_ion_pair(f"{el1}-{el2}")
+                weights[pair] = c1 * c2 # Initial weight
+                
+        # Normalize weights to sum to 1
+        total_w = sum(weights.values())
+        return {k: v/total_w for k, v in weights.items()}
 
-        sumweights = sum(weights.values())
-        weights = {key: value/sumweights for key, value in weights.items()}
+    def _load_pdf(self, filename):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        path = os.path.join(script_dir, "PDF_CSV", filename)
         
-        return weights
+        if not os.path.exists(path):
+            print(f"Error: File {path} not found.")
+            return {}
 
-    def interpolate_data(self, num_pnts_interval=1000):
-        interpolated_splines = {}
-        weighted_splines = {}
-        x_min = min(min(pdf.x) for pdf in self.ion_pairs.values())
-        x_max = min(max(pdf.x) for pdf in self.ion_pairs.values())
-        x_new = np.linspace(0, x_max, num_pnts_interval)
-
-        for ion_pair, pdf in self.ion_pairs.items():
-            interpolated_spline = interp1d(x_new, pdf.spline(x_new), kind='linear', bounds_error=False, fill_value=0)
-            interpolated_splines[ion_pair] = interpolated_spline
+        df = pd.read_csv(path, header=None)
+        pairs = {}
+        
+        for i in range(0, df.shape[1], 2):
+            raw_name = df.iloc[0, i]
+            if pd.isna(raw_name): continue
             
-            if ion_pair in self.weights:
-                weight = self.weights[ion_pair]
-                weighted_splines[ion_pair] = lambda x, s=interpolated_spline, w=weight: s(x) * w
-            else:
-                weighted_splines[ion_pair] = interpolated_spline
+            name = standardize_ion_pair(raw_name)
+            x = df.iloc[2:, i].dropna().astype(float).values
+            y = df.iloc[2:, i+1].dropna().astype(float).values
+            
+            # Sort and Clean
+            idx = np.argsort(x)
+            x, y = x[idx], y[idx]
+            x, u_idx = np.unique(x, return_index=True)
+            y = y[u_idx]
+            
+            # Zero extension at start
+            if x[0] > 0.1:
+                x_ext = np.linspace(0, x[0], int(x[0]*20))
+                x = np.concatenate([x_ext[:-1], x])
+                y = np.concatenate([np.zeros(len(x_ext)-1), y])
+            
+            # Savgol Smoothing
+            if self.apply_savgol and len(y) > self.savgol_params[0]:
+                wl, po = self.savgol_params
+                if wl % 2 == 0: wl += 1
+                # Only smooth non-zero parts to keep r=0 clean
+                nonzero_idx = np.where(y > 0.001)[0]
+                if len(nonzero_idx) > wl:
+                    start = nonzero_idx[0]
+                    y[start:] = savgol_filter(y[start:], window_length=wl, polyorder=po,mode='nearest')
+            # Ensure PDF doesn't go below zero by clipping negative values
+            y = np.maximum(y, 0)
 
-        return interpolated_splines, weighted_splines, x_new
+            weight = self.weights.get(name, 0)
+            pairs[name] = IonPairData(name, x, y, weight)
+            
+        return pairs
+
+    def _create_common_grid(self, points=2000):
+        if not self.ion_pairs: return np.linspace(0, 10, points)
+        max_x = min(max(p.x) for p in self.ion_pairs.values()) # Find the minimum max
+        return np.linspace(0, max_x, points)
+
+    def _create_weighted_splines(self):
+        # Create lambda functions that return weighted values on the grid
+        splines = {}
+        for name, p in self.ion_pairs.items():
+            splines[name] = lambda x, s=p.spline, w=p.weight: s(x) * w
+        return splines
 
     def analyze_pdf(self):
-        print("")
-        print(f"###  {self.comp}   #############")
+        print(f"\n### Analysis for {self.comp} ###")
+        
+        total_weighted_scl = 0
+        total_weight_norm = 0
 
-        # Prepare data for CSV
-        csv_data = [self.comp]  # Start with the composition
+        # Identify Cation-Anion Pairs
+        ca_pairs = [p for name, p in self.ion_pairs.items() if p.type == 'ca']
+        sum_ca_weights = sum(p.weight for p in ca_pairs)
+        
+        for pair in ca_pairs:
+            name = pair.name
+            print(f"Analyzing Pair: {name}")
+            
+            r_peak = pair.peak[0]
+            if r_peak is None or r_peak <= 0:
+                print(f"  Skipping {name}: No valid peak found.")
+                continue
 
-        # Check if the salt is a unary divalent salt
-        unary_divalent_salts = ["MgCl2", "CaCl2"]
-        spline_noise = any(salt in self.comp for salt in unary_divalent_salts)
+            # --- Formalism Step 1: Transfer Points ---
+            # r_m = m * Delta_r (Eq. 18)
+            # We calculate points until we run out of grid
+            delta_r = r_peak
+            transfer_points = np.arange(delta_r, self.x_grid[-1], delta_r)
+            
+            if len(transfer_points) == 0: continue
+            
+            # --- Formalism Step 2: Disruption Factors at Discrete Points ---
+            b_KF_vals = []
+            b_NI_vals = []
+            b_PH_vals = []
+            beta_vals = []
+            
+            # Constants for this pair
+            # b_KF (Bond Strength) Eq. 22
+            g_peak = pair.peak[1]
+            g_min = pair.minima[1] if pair.minima[0] else 0
+            # Note: Paper uses raw ratio. Since weight cancels out in ratio, we use weighted values is fine.
+            kf_val = 1.0
+            if g_peak > 1e-6:
+                kf_val = 1 - (g_peak - g_min) / g_peak
+            kf_val = np.clip(kf_val, 0, 1)
 
-        weighted_SCLs = 0
-        weights_pair = 0
+            # b_PH (Phonon Transfer) Eq. 23
+            ph_val = 1.0
+            if sum_ca_weights > 0:
+                ph_val = 1 - (pair.weight / sum_ca_weights)
+            ph_val = np.clip(ph_val, 0, 1)
 
-        for ion_pair_ca_i, pdf_data_ca_i in self.ion_pairs.items():
-            if pdf_data_ca_i.type == "ca":
-                print(f"Cation-anion pair: {ion_pair_ca_i}")
-
-                # Access peak and minima
-                peak_i = pdf_data_ca_i.peak
-                minima_i = pdf_data_ca_i.minima
-                print(f"Peak X: {peak_i[0]}, Minima X: {minima_i[0]}")
-
-                # Use the interpolated x-range for all calculations
-                x_range_i = self.x_new
+            # Identify corresponding cation-cation pair
+            cation = name.split('-')[0]
+            cc_name = standardize_ion_pair(f"{cation}-{cation}")
+            has_cc = cc_name in self.ion_pairs
+            
+            for m, r_m in enumerate(transfer_points, 1):
+                g_tot_val = 0
+                for pair_name, pair_data in self.ion_pairs.items():
+                    if cation in pair_name.split('-'):
+                        g_tot_val += self.weighted_splines[pair_name](r_m)
                 
-                cation_i, anion_i = ion_pair_ca_i.split('-')
-                y_combined = np.zeros_like(x_range_i)
-                y_weighted_ca_total = np.zeros_like(x_range_i)
-
-                conc_ca_i = self.weights[ion_pair_ca_i]
-                y_weighted_ca_i = self.weighted_splines[ion_pair_ca_i](x_range_i)
-
-                c_ca_i = conc_ca_i
-                sum_c_ca_j = 0
-
-                ion_pair_cc_i = '-'.join(sorted([cation_i, cation_i]))
-                no_cc_spline = False
-                try:
-                    y_weighted_cc_i = self.weighted_splines[ion_pair_cc_i](x_range_i)
-                except KeyError:
-                    y_weighted_cc_i = np.linspace(self.weights[ion_pair_cc_i], self.weights[ion_pair_cc_i], len(x_range_i))
-                    no_cc_spline = True
-
-                y_ideal = np.zeros_like(x_range_i)
-                sum_conc_ca = 0
-                sum_conc_cc = 0
-                conc_cc_j = 0
-                sum_c_cc_j = 0
-                y_weighted_cc_total = np.zeros_like(x_range_i)
-                # Calculate peak properties, combined spline, etc.
-                for ion_pair_j, pdf_data_j in self.ion_pairs.items():
-                    ion1, ion2 = ion_pair_j.split('-')
-                    y_weighted_j = self.weighted_splines[ion_pair_j](x_range_i)
-
-                    if pdf_data_j.type == "ca":
-                        # Access peak and minima
-                        peak_j = pdf_data_j.peak
-                        minima_j = pdf_data_j.minima
-                        conc_ca_j = self.weights[ion_pair_j]
-                        sum_c_ca_j += conc_ca_j# * peak_j[1] * peak_j[0]**-1
-                        sum_conc_ca += conc_ca_j
-                        if cation_i in [ion1, ion2]:
-                            y_weighted_ca_total += y_weighted_j
-
-                    if cation_i in [ion1, ion2]:
-                        y_combined += y_weighted_j
-
-                    if pdf_data_j.type == "cc_sim" or pdf_data_j.type == "cc_diff":
-                        conc_cc_j = self.weights[ion_pair_j]
-                        sum_c_cc_j += conc_cc_j
-                        sum_conc_cc += conc_cc_j
-                        if cation_i in [ion1, ion2]:
-                            y_weighted_cc_total += y_weighted_j
-                    
-                # Create a spline for y_combined using the interpolated x-range
-                y_combined_spline = interp1d(x_range_i, y_combined, kind='linear', bounds_error=False, fill_value=0)
+                g_ideal_val = 0
+                if m % 2 == 1: # Odd: Cation-Anion (This pair)
+                    g_ideal_val = self.weighted_splines[name](r_m)
+                else:          # Even: Cation-Cation
+                    if has_cc: # Check if cation-cation spline exists
+                        g_ideal_val = self.weighted_splines[cc_name](r_m)
+                    else: # Use the concentration of the cation-cation pair if not
+                        g_ideal_val = self.weights[cc_name]
+                        print(f"No cc data exists for {cc_name}, using concentration: {g_ideal_val}")
                 
-                # Use the interpolated x-range for transfer points
-                transfer_points = select_elements_at_intervals(self.x_new, peak_i[0])
-                transfer_points_indices = [np.argmin(np.abs(self.x_new - point)) for point in transfer_points]
-                transfer_points = self.x_new[transfer_points_indices]  # Ensure exact x-values from the grid
-
-                # Calculate cation-cation peak position and check if it exists
-                cc_transfer = False
-                DF = 0
-                if ion_pair_cc_i in self.ion_pairs:
-                    pdf_cc_i = self.ion_pairs[ion_pair_cc_i]
-                    cc_peak_i, _ = pdf_cc_i.find_first_peak_and_minimum(pdf_cc_i.x, pdf_cc_i.y, any_type=True)
-                    print(f"Cation-cation pair: {ion_pair_cc_i}")
-                    if cc_peak_i[0] is not None:
-                        print(f"First cc peak: x = {cc_peak_i[0]:.2f}, y = {cc_peak_i[1]:.2f}")
-                        if cc_peak_i[0] > peak_i[0] and cc_peak_i[0] < 2*transfer_points[1]:
-                            DF = ((peak_i[0] / cc_peak_i[0]) - (1 / 2)) / (1 - (1 / 2))
-                            cc_transfer = True
-                    else:
-                        print("No peak found for cation-cation pair")
+                # b_NI (Non-Ideal Recipient)
+                ni_val = 1.0
+                if g_tot_val > 1e-6:
+                    ni_val = 1 - (g_ideal_val / g_tot_val)
+                ni_val = np.clip(ni_val, 0, 1)
+                
+                # Store
+                b_KF_vals.append(kf_val)
+                b_PH_vals.append(ph_val)
+                b_NI_vals.append(ni_val)
+                
+                # Beta
+                if kf_val == 1 or ph_val == 1 or ni_val == 1:
+                    beta = float('inf')
                 else:
-                    print(f"No data found for cation-cation pair: {ion_pair_cc_i}")
+                    beta = (kf_val/(1-kf_val)) + (ph_val/(1-ph_val)) + (ni_val/(1-ni_val))
+                beta_vals.append(beta)
 
-                b_KF = np.zeros(len(transfer_points))
-                b_NI = np.zeros(len(transfer_points))
-                b_PH = np.zeros(len(transfer_points))
-
-                # Bond strength/diffusion factor: How well ideal recipient can receive energy
-                KF = (abs(peak_i[1]-minima_i[1])/peak_i[1]) 
-                # Non-ideal recipient factor: Probability of energy transfer to ideal recipient
-                NI = (y_weighted_ca_i[transfer_points_indices[1]]/y_combined[transfer_points_indices[1]]) # First transfer
-                # Phonon transfer factor: Probability of vibrational mode coupling in structure
-                PH = conc_ca_i/sum_conc_ca 
-
-                # Relative participation of pair, by fraction of cation-anion pairs present
-                ca_frac = c_ca_i/sum_c_ca_j
-
-                next_not_last = True
-                for i in range(0,len(transfer_points)):
-                    r_i = transfer_points_indices[i]
-                    if i == len(transfer_points)-1:
-                        next_not_last = False
-                    else:
-                        r_i_next = transfer_points_indices[i+1]
-
-                    if i == 0:           # Assume all energy travels minimum distance
-                        continue
-
-                    if i % 2 == 1:      # Anion-to-cation transfer
-                        if y_combined[r_i] == 0:
-                            NI = 1
-                        else:
-                            NI = (y_weighted_ca_i[r_i]/y_combined[r_i])
-                    else:               # Cation-to-anion transfer
-                        if y_combined[r_i] == 0:
-                            NI = 1
-                        else:
-                            NI = (y_weighted_cc_i[r_i]/y_combined[r_i])
-                    if cc_transfer:
-                        # PH_f = PH + (1 - PH)*KF**12*DF**(1/12)
-                        PH_f = PH #+ (1 - PH)*KF**6*DF # <--- Good
-                        # PH_f = PH + DF*KF - PH*DF*KF
-                    else:
-                        PH_f = PH
-
-                    b_KF[i] += 1 - KF
-                    b_NI[i] += 1 - NI
-                    b_PH[i] += 1 - PH_f
-
-                    # Ensure b_factors are within [0, 1]
-                    b_KF[i] = min(max(b_KF[i], 0), 1)
-                    b_NI[i] = min(max(b_NI[i], 0), 1)
-                    b_PH[i] = min(max(b_PH[i], 0), 1)
-
-                beta_i = np.zeros(len(transfer_points))
-                beta_i_integral = 0#np.zeros(len(transfer_points))
-
-                b_array = [b_KF,b_NI,b_PH]
-
-                S_i = np.zeros(len(transfer_points))   # Initialize cumulative survival function
+            # --- Formalism Step 3: Cumulative Survival S(r) ---
+            
+            S_discrete = [1.0] # Value for first interval [0, r1]
+            int_beta = 0
+            
+            for beta in beta_vals:
+                if beta == float('inf'):
+                    int_beta = -float('inf')
+                else:
+                    int_beta -= beta*delta_r
+                S_discrete.append(np.exp(int_beta))
                 
-                for k in range(len(transfer_points_indices)):
-                    b_i_sum = 0
-                    for b_i in b_array:
-                        if b_i[k] == 1:
-                            b_i_sum = (float('inf'))
-                        else:
-                            b_i_sum += b_i[k] / (1 - b_i[k])
-                    beta_i[k] += (b_i_sum)
-
-                #print(f'beta_i: {beta_i}')
-
-                # Calculate cumulative survival function S_i
-                for k in range(0,len(transfer_points_indices)-1):
-                    beta_i_integral += beta_i[k]*(transfer_points[k+1] - transfer_points[k])
-                    S_i[k] = np.exp(-beta_i_integral)
-
-                S_i_y = np.zeros(len(x_range_i))   # Initialize S_i_y with zeros
-                # Iterate over x_range_i and assign the corresponding S_i value
-                for i in range(len(x_range_i)):
-                    for k in range(0, len(transfer_points_indices)-1):
-                        if transfer_points_indices[k+1] > i >= transfer_points_indices[k]:
-                            S_i_y[i] = S_i[k]
-                            break  # Exit the loop once the correct S_i is found
-                x_SCL_pair = np.trapezoid(S_i_y, x=x_range_i)
-                print(f'x_SCL_pair: {x_SCL_pair}')  
+            # --- Formalism Step 4: SCL Integration ---
+            # Eq. 16: Integral of S(r)dr
+            # Sum of rectangles: Width * Height
+            # Width is always delta_r
+            # SCL = delta_r * (S[0] + S[1] + S[2] + ...)
+            # We exclude the last tail if it goes to infinity, practically truncate when S is negligible
+            
+            # S_discrete has N+1 elements for N transfer points (intervals 0..N)
+            # Sum S_discrete[:-1] because S_discrete[i] is the height of the i-th interval
+            scl_pair = delta_r * sum(S_discrete[:-1])
+            
+            # Weighting for average
+            RTE = pair.weight / sum_ca_weights if sum_ca_weights > 0 else 0
+            total_weighted_scl += scl_pair * RTE
+            total_weight_norm += RTE
+            
+            print(f"  SCL: {scl_pair:.3f} A (Weight: {RTE:.3f})")
+            
+            # --- Map S(r) to fine grid for Plotting ---
+            S_y_grid = np.zeros_like(self.x_grid)
+            curr_s_idx = 0
+            for i, x in enumerate(self.x_grid):
+                # Determine which interval we are in
+                # interval 0: 0 <= x < r1
+                # interval 1: r1 <= x < r2
+                if curr_s_idx < len(transfer_points):
+                    if x >= transfer_points[curr_s_idx]:
+                        curr_s_idx += 1
                 
-                weights_pair += ca_frac
-                weighted_SCLs += x_SCL_pair * ca_frac
+                if curr_s_idx < len(S_discrete):
+                    S_y_grid[i] = S_discrete[curr_s_idx]
+                else:
+                    S_y_grid[i] = S_discrete[-1]
 
-                # Store results for this ion pair
-                self.ion_pair_results[ion_pair_ca_i] = {
-                    'type': pdf_data_ca_i.type,
-                    'peak_x': peak_i[0],
-                    'peak_y': peak_i[1],
-                    'minima_x': minima_i[0],
-                    'minima_y': minima_i[1],
-                    'transfer_factors': [b_KF, b_NI, b_PH],
-                    'scl': x_SCL_pair,
-                    'weight': ca_frac,
-                    'ion_pair_ca_i': ion_pair_ca_i,
-                    'ion_pair_cc_i': ion_pair_cc_i,
-                    'cc_transfer': cc_transfer,
-                    'cc_peak_x': cc_peak_i[0] if 'cc_peak_i' in locals() and cc_peak_i[0] is not None else None,
-                    'cc_peak_y': cc_peak_i[1] if 'cc_peak_i' in locals() and cc_peak_i[0] is not None else None,
-                    'DF': DF if 'DF' in locals() else None
-                }
-
-                # Store plot data
-                self.plot_data.append({
-                    # 'x_range': x_range_i,
-                    # 'y_ideal': y_ideal,
-                    # 'y_combined': y_combined,
-                    # 'beta_y': beta_y,
-                    # 'beta_i': beta_i,
-                    # 'beta_i_integral': beta_i_integral,
-                    # 'S_i': S_i,
-                    'x_range': x_range_i,
-                    'x_SCL_pair': x_SCL_pair,
-                    'S_i': S_i_y,
-                    'ion_pair_ca_i': ion_pair_ca_i,
-                    'MFP_bc': self.gamma_bc,
-                })
-
-                # print(f"lambda_P(r) - {ion_pair_ca_i} = {round(x_SCL_pair, 5)}")
-        avg_SCL = weighted_SCLs / weights_pair
-        self.plot_data.append({'avg_SCL': round(avg_SCL, 5)})
-        print(f"Average SCL: {round(avg_SCL, 5)}")
-        print(f"lambda_BC = {round(self.gamma_bc, 5)}")
-
-        # Define CSV filename and check if it exists
-        csv_filename = 'SCL_results_V1.csv'
-        file_exists = os.path.isfile(csv_filename)
-        
-        # Define the base headers that are always present
-        base_headers = ['Composition', 'Source', 'Temperature (K)', 'Average SCL (A)']
-        
-        # Prepare data row with base information
-        base_data = [self.comp, self.source, self.temp, round(avg_SCL, 5)]
-        
-        # Get the current ion pairs and sort them for consistent ordering
-        current_pairs = sorted(self.ion_pair_results.items())
-        
-        # Create a dictionary to map pair labels to their data
-        pair_data = {}
-        for pair_num, (ion_pair, result) in enumerate(current_pairs, 1):
-            if pair_num > 6:  # Limit to 6 pairs as per requirement
-                break
-                
-            pair_data[pair_num] = {
-                'label': ion_pair,
-                'data': [
-                    round(result['scl'], 5) if result['scl'] is not None else '',
-                    round(result['peak_x'], 5) if result['peak_x'] is not None else '',
-                    round(result['peak_y'], 5) if result['peak_y'] is not None else '',
-                    round(result['minima_x'], 5) if result['minima_x'] is not None else '',
-                    round(result['minima_y'], 5) if result['minima_y'] is not None else '',
-                    round(result.get('cc_peak_x', ''), 5) if result.get('cc_peak_x') is not None else '',
-                    round(result.get('cc_peak_y', ''), 5) if result.get('cc_peak_y') is not None else ''
-                ]
+            # Store Results
+            self.ion_pair_results[name] = {
+                'scl': scl_pair,
+                'peak_x': pair.peak[0],
+                'peak_y': pair.peak[1],
+                'minima_x': pair.minima[0],
+                'minima_y': pair.minima[1],
+                'cc_peak_x': self.ion_pairs[cc_name].peak[0] if has_cc else None,
+                'cc_peak_y': self.ion_pairs[cc_name].peak[1] if has_cc else None,
             }
-        
-        # If the file doesn't exist, create it with headers
-        if not file_exists:
-            headers = base_headers.copy()
             
-            # Generate headers for all pairs (up to 6 as per requirement)
-            for pair_num in range(1, 7):
-                # Add pair label header
-                headers.append(f'Pair {pair_num} Label')
-                
-                # Add pair-specific headers
-                pair_headers = [
-                    f'Pair {pair_num} SCL_i (A)',
-                    f'Pair {pair_num} Peak X (A)',
-                    f'Pair {pair_num} Peak Y',
-                    f'Pair {pair_num} Min X (A)',
-                    f'Pair {pair_num} Min Y',
-                    f'Pair {pair_num} CC Peak X (A)',
-                    f'Pair {pair_num} CC Peak Y'
-                ]
-                headers.extend(pair_headers)
-            
-            # Write headers to the new file
-            with open(csv_filename, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-        else:
-            # Read existing data to check for duplicate entries
-            with open(csv_filename, 'r', newline='') as f:
-                reader = csv.reader(f)
-                headers = next(reader, [])
-                existing_data = list(reader)
-            
-            # Filter out any existing entry with the same composition AND source
-            existing_data = [row for row in existing_data if len(row) > 1 and not (row[0] == self.comp and row[1] == self.source)]
-            
-            # Reconstruct the file with filtered data
-            with open(csv_filename, 'w', newline='') as f:
-                writer = csv.writer(f)
-                writer.writerow(headers)
-                writer.writerows(existing_data)
-        
-        # Prepare the new data row according to headers
-        new_data_row = base_data.copy()
-        
-        # Fill in the data according to the headers
-        i = len(base_headers)  # Start after base headers
-        pair_num = 1
-        
-        while i < len(headers):
-            # If this is a pair label header
-            if f'Pair {pair_num} Label' in headers[i]:
-                # Add the pair label if we have data for this pair number
-                if pair_num in pair_data:
-                    new_data_row.append(pair_data[pair_num]['label'])
-                else:
-                    new_data_row.append('')
-                
-                # Add the pair data if we have it
-                if pair_num in pair_data:
-                    new_data_row.extend(pair_data[pair_num]['data'])
-                else:
-                    # Add empty values for all pair data columns
-                    new_data_row.extend([''] * 7)  # 7 data columns per pair
-                
-                i += 8  # Move to next pair (1 label + 7 data columns)
-                pair_num += 1
-            else:
-                # If we encounter an unexpected header format, just add an empty value
-                new_data_row.append('')
-                i += 1
-        
-        # Append the new data row to the CSV
-        with open(csv_filename, 'a', newline='') as f:
-            writer = csv.writer(f)
-            writer.writerow(new_data_row)
+            self.plot_data.append({
+                'ion_pair_ca_i': name,
+                'x_range': self.x_grid,
+                'S_i': S_y_grid,
+                'x_SCL_pair': scl_pair
+            })
 
-    def save_plot_data(self, folder='plot_data', overwrite=True):
-        """Save the plot data for this salt to a CSV file.
+        self.avg_SCL = total_weighted_scl / total_weight_norm if total_weight_norm > 0 else 0
+        self.plot_data.append({'avg_SCL': self.avg_SCL})
         
-        Args:
-            folder (str): Directory to save the plot data files
-            overwrite (bool): If True, overwrite existing files with the same name
-                             If False, skip saving if file exists
-        """
+        print(f"Average SCL: {self.avg_SCL:.4f} A")
+        
+        # --- Generate Outputs ---
+        self._save_csv_results()
+        
+    def _save_csv_results(self):
+        filename = 'SCL_results.csv'
+        file_exists = os.path.isfile(filename)
+        
+        base_headers = ['Composition', 'Source', 'Temperature (K)', 'Average SCL (A)']
+        row = [self.comp, self.source, self.temp, round(self.avg_SCL, 5)]
+        
+        # Prepare pair data (Limit to top 6 pairs to keep CSV consistent)
+        sorted_pairs = sorted(self.ion_pair_results.items())
+        headers = base_headers.copy()
+        data = row.copy()
+        
+        for i in range(1, 7):
+            headers.extend([
+                f'Pair {i} Label', f'Pair {i} SCL_i (A)', 
+                f'Pair {i} Peak X (A)', f'Pair {i} Peak Y',
+                f'Pair {i} Min X (A)', f'Pair {i} Min Y', 
+                f'Pair {i} CC Peak X (A)', f'Pair {i} CC Peak Y'
+            ])
+            
+            if i <= len(sorted_pairs):
+                name, res = sorted_pairs[i-1]
+                data.extend([
+                    name, round(res['scl'], 5),
+                    round(res['peak_x'] or 0, 5), round(res['peak_y'] or 0, 5),
+                    round(res['minima_x'] or 0, 5), round(res['minima_y'] or 0, 5),
+                    round(res['cc_peak_x'] or 0, 5), round(res['cc_peak_y'] or 0, 5)
+                ])
+            else:
+                data.extend([''] * 8)
+                
+        # Write mode handling (don't duplicate if same comp/source exists)
+        mode = 'a'
+        if file_exists:
+            # Check duplicates
+            with open(filename, 'r') as f:
+                reader = csv.reader(f)
+                existing = list(reader)
+            # Filter out current comp if exists to overwrite
+            filtered = [r for r in existing if len(r) > 1 and not (r[0] == str(self.comp) and r[1] == str(self.source))]
+            if len(filtered) != len(existing):
+                with open(filename, 'w', newline='') as f:
+                    writer = csv.writer(f)
+                    writer.writerows(filtered)
+        else:
+            with open(filename, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(headers)
+
+        with open(filename, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(data)
+
+    def save_plot_data(self, folder='SCL_plot_data'):
         os.makedirs(folder, exist_ok=True)
-        # Create a safe filename that includes both composition and source
         safe_source = ''.join(c if c.isalnum() else '_' for c in self.source.split(',')[0].strip())
         filename = os.path.join(folder, f'{self.comp.replace("-", "_")}_{safe_source}_plot_data.csv')
         
-        # Skip if file exists and we're not overwriting
-        if not overwrite and os.path.exists(filename):
-            print(f"Skipping {filename} - file already exists (use overwrite=True to replace)")
-            return
+        df = pd.DataFrame({'r (A)': self.x_grid})
         
-        # Get the x-range used in the PDF analysis
-        if not hasattr(self, 'x_new') or len(self.x_new) == 0:
-            print(f"No PDF data available for {self.comp}")
-            return
+        # Add weighted PDFs
+        for name, func in self.weighted_splines.items():
+            df[f'g(r)_weighted_{name}'] = func(self.x_grid)
             
-        # Create a DataFrame with the interpolated x-values
-        df = pd.DataFrame({'r (A)': self.x_new})
-        
-        # Add weighted PDF g(r) for each ion pair using the interpolated splines
-        for ion_pair, spline_func in self.weighted_splines.items():
-            # Evaluate the weighted spline at the interpolated x-values
-            weighted_g_r = spline_func(self.x_new)
-            # Add to DataFrame with 'weighted_' prefix
-            df[f'g(r)_weighted_{ion_pair}'] = weighted_g_r
-            
-            # Also save the unweighted PDF if available
-            if ion_pair in self.interpolated_splines:
-                unweighted_g_r = self.interpolated_splines[ion_pair](self.x_new)
-                df[f'g(r)_unweighted_{ion_pair}'] = unweighted_g_r
-        
-        # Add S_i values, ensuring they're on the same x-grid
-        for i, data in enumerate(self.plot_data):
-            if 'S_i' in data:
-                # Get the ion pair name or use a default
-                ion_pair = data.get('ion_pair_ca_i', f'pair_{i}')
-                series_name = f'S_i_{ion_pair}'
+        # Add S(r) curves
+        for data in self.plot_data:
+            if 'ion_pair_ca_i' in data:
+                df[f"S_i_{data['ion_pair_ca_i']}"] = data['S_i']
                 
-                # If S_i is already on the same grid, use it directly
-                if 'x_range' in data and len(data['x_range']) == len(self.x_new) and np.allclose(data['x_range'], self.x_new):
-                    df[series_name] = data['S_i']
-                # Otherwise, interpolate to the common grid
-                elif 'x_range' in data and 'S_i' in data and len(data['S_i']) > 0:
-                    # Create interpolation function for this S_i series
-                    interp_func = interp1d(
-                        data['x_range'], 
-                        data['S_i'], 
-                        kind='linear', 
-                        bounds_error=False, 
-                        fill_value=np.nan
-                    )
-                    # Add interpolated values to DataFrame
-                    df[series_name] = interp_func(self.x_new)
+        df['Average_SCL'] = self.avg_SCL
+        df['lambda_BC'] = self.gamma_bc
         
-        # Add metadata
-        if any('avg_SCL' in data for data in self.plot_data):
-            df['Average_SCL'] = next((data['avg_SCL'] for data in self.plot_data if 'avg_SCL' in data), np.nan)
-        if hasattr(self, 'gamma_bc'):
-            df['lambda_BC'] = self.gamma_bc
-        
-        # Save to CSV
         df.to_csv(filename, index=False)
         print(f"Plot data saved to {filename}")
-        return filename
 
-    def plot_pdf(self, show_plot=True, save_plot=True, output_dir='scl_plots'):
-        """Plot the PDF and SCL analysis.
-        
-        Args:
-            show_plot (bool): Whether to display the plot
-            save_plot (bool): Whether to save the plot to a file
-            output_dir (str): Directory to save the plot
-        """
-        if not hasattr(self, 'plot_data') or not self.plot_data:
+
+    def plot_pdf(self, show_plot=True, save_plot=True, output_dir='SCL_plots'):
+
+        if not hasattr(self, 'SCL_plot_data') or not self.plot_data:
             print(f"No plot data available for {self.comp}")
             return
             
@@ -860,29 +560,14 @@ class MoltenSaltPDF:
             # Always use the interpolated splines for plotting
             if ion_pair in self.weighted_splines:
                 # Evaluate the spline at the interpolated x-range
-                weighted_y = self.weighted_splines[ion_pair](self.x_new)
-                spline, = plt.plot(self.x_new, weighted_y, label=f"{ion_pair}")
+                weighted_y = self.weighted_splines[ion_pair](self.x_grid)
+                spline, = plt.plot(self.x_grid, weighted_y, label=f"{ion_pair}")
                 spline_color = spline.get_color()
                 ion_pair_colors[ion_pair] = spline_color  # Store the color for this ion pair
 
             # Access peak and minima
             peak = pdf_data.peak
             minima = pdf_data.minima
-
-            # if peak[0] is not None:
-            #     peakpoint, = plt.plot(peak[0], peak[1], 'ro', markersize=10)
-            #     #plt.axvline(x=2*peak[0], color=peakpoint.get_color(),linestyle='dotted')
-            #     plt.annotate(f"Peak: ({peak[0]:.2f}, {peak[1]:.2f})", 
-            #                 (peak[0], peak[1]), 
-            #                 xytext=(5, 5), 
-            #                 textcoords='offset points')
-
-            # if minima[0] is not None:
-            #     plt.plot(minima[0], minima[1], 'bo', markersize=10)
-            #     plt.annotate(f"Min: ({minima[0]:.2f}, {minima[1]:.2f})", 
-            #                 (minima[0], minima[1]), 
-            #                 xytext=(5, 5), 
-            #                 textcoords='offset points')
 
         # In the plot_pdf method, update the S_i plotting section to:
         for data in self.plot_data:
@@ -891,10 +576,10 @@ class MoltenSaltPDF:
                 color = ion_pair_colors.get(ion_pair, 'black')
                 
                 # Get S_i data
-                if 'S_i' in data and len(data['S_i']) == len(self.x_new):
+                if 'S_i' in data and len(data['S_i']) == len(self.x_grid):
                     S_i = data['S_i']
                 elif 'S_i' in data and 'x_range' in data:
-                    S_i = np.interp(self.x_new, data['x_range'], data['S_i'])
+                    S_i = np.interp(self.x_grid, data['x_range'], data['S_i'])
                 else:
                     continue
                     
@@ -905,13 +590,13 @@ class MoltenSaltPDF:
                 # Plot bars for each step
                 for i in range(len(step_indices)-1):
                     start_idx = step_indices[i]
-                    end_idx = step_indices[i+1] if (i < len(step_indices)-1) else len(self.x_new)-1
-                    x_start = self.x_new[start_idx]
-                    x_end = self.x_new[end_idx] if end_idx < len(self.x_new) else self.x_new[-1]
+                    end_idx = step_indices[i+1] if (i < len(step_indices)-1) else len(self.x_grid)-1
+                    x_start = self.x_grid[start_idx]
+                    x_end = self.x_grid[end_idx] if end_idx < len(self.x_grid) else self.x_grid[-1]
                     
                     # Calculate the midpoint between steps for bar width
                     if i < len(step_indices)-2:
-                        next_x_start = self.x_new[step_indices[i+1]]
+                        next_x_start = self.x_grid[step_indices[i+1]]
                         bar_width = (next_x_start - x_start)# / 2
                     else:
                         bar_width = (x_end - x_start)# / 2
@@ -927,10 +612,6 @@ class MoltenSaltPDF:
                     plt.bar(bar_x, s_value, width=bar_width, 
                         color=color, alpha=alpha*0.6, edgecolor='none', 
                         align='center', zorder=0)
-                    
-                    # # Plot the top line
-                    # plt.hlines(s_value, x_start, x_end, colors=color, 
-                    #         linewidth=1.5, alpha=0., zorder=0)
 
         for data in self.plot_data:
             # Check if 'ion_pair_ca_i' key exists
@@ -939,12 +620,12 @@ class MoltenSaltPDF:
                 color = ion_pair_colors.get(ion_pair, 'black')  # Default to black if not found
                 
                 # Ensure we're using the interpolated x-range for S_i
-                if 'S_i' in data and len(data['S_i']) == len(self.x_new):
-                    plt.plot(self.x_new, data['S_i'], label=f"S(r): {ion_pair}", color=color, linestyle='dotted')
+                if 'S_i' in data and len(data['S_i']) == len(self.x_grid):
+                    plt.plot(self.x_grid, data['S_i'], label=f"S(r): {ion_pair}", color=color, linestyle='dotted')
                 elif 'S_i' in data and 'x_range' in data:
-                    # If S_i was calculated on a different x-range, interpolate it to self.x_new
-                    interp_S_i = np.interp(self.x_new, data['x_range'], data['S_i'])
-                    plt.plot(self.x_new, interp_S_i, label=f"S(r): {ion_pair}", color=color, linestyle='dotted')
+                    # If S_i was calculated on a different x-range, interpolate it to self.x_grid
+                    interp_S_i = np.interp(self.x_grid, data['x_range'], data['S_i'])
+                    plt.plot(self.x_grid, interp_S_i, label=f"S(r): {ion_pair}", color=color, linestyle='dotted')
                 
                 # Only plot the line if there is more than one cation-anion pair
                 # if ca_pair_count > 1 and 'x_SCL_pair' in data:
@@ -967,55 +648,63 @@ class MoltenSaltPDF:
         plt.ylabel('g(r)')
         # plt.title(f'{format_composition_with_subscripts(self.comp)} ({self.temp}K)')
         # Calculate the x-range to start 0.5 Angstrom before the first nonzero data point
-        x_min = min(self.x_new)
-        x_max = max(self.x_new)
+        x_min = min(self.x_grid)
+        x_max = max(self.x_grid)
 
         # Find the first nonzero data point across all ion pairs
         first_nonzero_x = x_max  # Start with maximum as fallback
         for ion_pair, pdf_data in self.ion_pairs.items():
             if ion_pair in self.weighted_splines:
-                weighted_y = self.weighted_splines[ion_pair](self.x_new)
+                weighted_y = self.weighted_splines[ion_pair](self.x_grid)
                 # Find first index where y > 0.01 (small threshold to avoid numerical noise)
                 nonzero_indices = np.where(weighted_y > 0.01)[0]
                 if len(nonzero_indices) > 0:
-                    first_nonzero_x = min(first_nonzero_x, self.x_new[nonzero_indices[0]])
+                    first_nonzero_x = min(first_nonzero_x, self.x_grid[nonzero_indices[0]])
 
         # Set x-axis range to start 0.5 Angstrom before first nonzero data point
         x_start = max(x_min, first_nonzero_x - 0.75)
         x_pad = (x_max-x_min)*0.05
         plt.xlim(x_start, x_max+x_pad)
-        plt.ylim(0,None)
 
         ax = plt.gca()
         # Only create top axis for unary salts with a single endmember
-        if len(self.composition) == 1:  # Check if it's a unary salt
+        if len(self.fractions) == 1:  # Check if it's a unary salt
+            # FIX: Check .type from self.ion_pairs, not from the results dict
             ca_pairs = [(ip, res) for ip, res in self.ion_pair_results.items() 
-                    if res.get('type') == 'ca' and res.get('peak_x')]
+                        if self.ion_pairs[ip].type == 'ca' and res.get('peak_x')]
+            
             max_labels = 8  # limit labels per pair to avoid horizontal collisions
-            # plt.figure(figsize=(4.75, 4.35))
+            
             for idx, (ion_pair, result) in enumerate(ca_pairs):
                 rep_peak = result.get('peak_x')
                 if not rep_peak or rep_peak <= 0:
                     continue
+                
+                # Calculate points based on peak distance (ideal transfer steps)
                 r_points_full = np.arange(0.0, (x_max + x_pad) + 0.5 * rep_peak, rep_peak)
                 r_labels_full = ["" if i == 0 else rf"$r_{{{i}}}$" for i in range(len(r_points_full))]
+                
                 valid = (r_points_full >= x_start) & (r_points_full <= (x_max + x_pad))
                 r_points = r_points_full[valid]
                 r_labels = [lbl for lbl, v in zip(r_labels_full, valid) if v]
+                
                 # Thin labels to avoid horizontal overlap
                 if len(r_points) > max_labels:
                     step = int(np.ceil(len(r_points) / max_labels))
                     r_points = r_points[::step]
                     r_labels = r_labels[::step]
+                
                 # Create a dedicated twin axis for this pair
                 secax = ax.twiny()
                 secax.set_xlim(ax.get_xlim())
                 secax.set_xticks(r_points)
                 secax.set_xticklabels(r_labels)
+                
                 # Color tick labels to match the ion pair curve
                 color = ion_pair_colors.get(ion_pair, 'black')
                 for lbl in secax.get_xticklabels():
                     lbl.set_color(color)
+                
                 # Styling: no axis label/spine, no tick lines, and offset pad to avoid overlap
                 secax.set_xlabel("")
                 if 'top' in secax.spines:
@@ -1070,38 +759,36 @@ class MoltenSaltPDF:
         if show_plot:
             plt.show()
         # plt.close()
-        
-
-
+   
 class PDFAnalyzer:
-    def __init__(self, save_plot_data=False):
-        self.molten_salts = []
+    def __init__(self, save_plot_data=False, show_plot=False):
+        self.salts = []
         self.save_plot_data = save_plot_data
+        self.show_plot = show_plot
 
-    def add_molten_salt(self, pdf_file, comp, source, temp, gamma_bc, apply_savgol=False, savgol_window_length=11, savgol_polyorder=3):
-        salt = MoltenSaltPDF(comp, pdf_file, source, temp, gamma_bc, apply_savgol, savgol_window_length, savgol_polyorder)
-        self.molten_salts.append(salt)
+    def add_molten_salt(self, *args, **kwargs):
+        self.salts.append(MoltenSaltPDF(*args, **kwargs))
 
     def analyze_all(self):
-        for salt in self.molten_salts:
+        for salt in self.salts:
             salt.analyze_pdf()
             if self.save_plot_data:
                 salt.save_plot_data()
 
     def plot_all(self):
-        for salt in self.molten_salts:
-            salt.plot_pdf(show_plot=True)
+        for salt in self.salts:
+            salt.plot_pdf(show_plot=self.show_plot)
+
+# ==========================================
+# 3. Execution
+# ==========================================
 
 def main():
-    # Set to True to save plot data for all salts
-    save_all_plot_data = True  # Change to False to disable automatic saving
-    
-    analyzer = PDFAnalyzer(save_plot_data=save_all_plot_data)
+    analyzer = PDFAnalyzer(save_plot_data=True,show_plot=False)
 
-    # analyzer.add_molten_salt('0.5LiCl-0.5KCl_Jiang_CORRECTED.csv', "0.5LiCl-0.5KCl", 'Jiang, 2016', 727, 0)
-    # analyzer.add_molten_salt('0.637LiCl-0.363KCl_Jiang_CORRECTED.csv',"0.637LiCl-0.363KCl",'Jiang, 2024', 750, 0)
-    # analyzer.add_molten_salt('0.4903NaCl-0.5097CaCl2_Wei_CORRECTED.csv', "0.4903NaCl-0.5097CaCl2", 'Wei, 2022', 1023, 3.76913)
-    # analyzer.add_molten_salt('0.718KCl-0.282CaCl2_Wei_CORRECTED.csv', "0.718KCl-0.282CaCl2", 'Wei, 2022', 1300, 0)
+    # --- Add your salts here (Copied from original script inputs) ---
+    # Example:
+    # analyzer.add_molten_salt('PDF_LiCl.csv', "1.0LiCl", 'Walz, 2019', 878, 4.10511)
 
     # Unary Salts
     analyzer.add_molten_salt('PDF_LiF.csv',"1.0LiF",'Walz, 2019', 1121, 3.28553)   # Walz, 2019; 1121K
@@ -1147,73 +834,9 @@ def main():
     analyzer.add_molten_salt('0.5UCl-0.5KCl_Andersson.csv',"0.5KCl-0.5UCl3",'Andersson, 2024', 1250, 0)
     analyzer.add_molten_salt('PDF_LiF-NaF-UF4.csv',"0.5454LiF-0.3636NaF-0.091UF4",'Grizzi, 2024', 1473, 0)
 
-
-    # Add molten salts to analyze
-    # # with Savgol smoothing:
-    # analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0, 
-    #                         apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 900K
-    # analyzer.add_molten_salt('PDF_78NaF-22UF4_1000_Zhang.csv',"0.78NaF-0.22UF4",'(1000K) Zhang, 2024', 1000, 0, 
-    #                         apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1000K
-    # analyzer.add_molten_salt('PDF_78NaF-22UF4_1100_Zhang.csv',"0.78NaF-0.22UF4",'(1100K) Zhang, 2024', 1100, 0, 
-    #                         apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1100K
-    # analyzer.add_molten_salt('PDF_78NaF-22UF4_1200_Zhang.csv',"0.78NaF-0.22UF4",'(1200K) Zhang, 2024', 1200, 0, 
-    #                         apply_savgol=True, savgol_window_length=11, savgol_polyorder=3)   # Zhang, 2024; 1200K
-    # analyzer.add_molten_salt('PDF_LiCl.csv',"1.0LiCl",'Walz, 2019', 878, 4.10511)   # Walz, 2019; 878K
-
-    # analyzer.add_molten_salt('NaCl_Lu.csv', "1.0NaCl", 'Lu, 2021', 1200, 4.48028)
-    # analyzer.add_molten_salt('PDF_KCl.csv',"1.0KCl",'Walz, 2019', 1043, 4.47675)   # Walz, 2019; 1043K
-
-    # analyzer.add_molten_salt('PDF_LiF.csv',"1.0LiF",'Walz, 2019', 1121, 3.28553)   # Walz, 2019; 1121K
-    # analyzer.add_molten_salt('PDF_NaF.csv',"1.0NaF",'Walz, 2019', 1266, 5.22361)   # Walz, 2019; 1266.15K
-    # analyzer.add_molten_salt('PDF_KF.csv',"1.0KF",'Walz, 2019', 1131, 4.63533)   # Walz, 2019; 1131.15K
-    # # analyzer.add_molten_salt('MgCl_Lu.csv', "1.0MgCl2", 'Lu, 2021', 1100, 4.76796)
-    # # analyzer.add_molten_salt('PDF_MgCl2.csv',"1.0MgCl2",'McGreevy, 1987', 998, 4.76796)   # McGreevy, 1987; 998K
-    # analyzer.add_molten_salt('PDF_MgCl2_Roy.csv',"1.0MgCl2",'Roy, 2021', 1073, 4.76796)   # Roy, 2021; 1073K
-    # # analyzer.add_molten_salt('PDF_CaCl2.csv',"1.0CaCl2",'McGreevy, 1987', 1093, 7.72598)   # McGreevy, 1987; 1093K
-    # analyzer.add_molten_salt('CaCl_Bu.csv',"1.0CaCl2",'Bu, 2021', 1073, 7.72598)   # Bu, 2022; 1073K
-    # # analyzer.add_molten_salt('PDF_SrCl2.csv',"1.0SrCl2",'McGreevy, 1987', 1198, 0)   # McGreevy, 1987; 998K
-    # analyzer.add_molten_salt('PDF_NaCl-UCl3.csv',"0.64NaCl-0.36UCl3",'Andersson, 2022', 1250, 2.5393)   # PDF Andersson, 2022
-    # # analyzer.add_molten_salt('PDF_NaCl-UCl3.csv',"0.64NaCl-0.36UCl3",'ANL-Andersson, 2022', 1250, 2.5393)   # PDF Andersson, 2022
-    # analyzer.add_molten_salt('PDF_FLiBe_Grizzi.csv',"0.5LiF-0.5BeF2",'Sun, 2024', 900, 0)   # PDF Sun, 900 K, 2024
-    # # analyzer.add_molten_salt('PDF_FLiBe_Langford.csv',"0.66LiF-0.34BeF2",'Langford, 2022', 973, 1.90187)   # PDF Langford, 2022 (Cylindrical)
-    # analyzer.add_molten_salt('PDF_FLiBe_Fayfar.csv',"0.66LiF-0.34BeF2",'Fayfar, 2023', 973, 1.90187)   # PDF Fayfar
-    # analyzer.add_molten_salt('PDF_FLiNa.csv',"0.6LiF-0.4NaF",'Grizzi, 2024', 973, 2.63857)   # PDF Grizzi, 900 K, 2024
-    # analyzer.add_molten_salt('PDF_FLiNaK.csv',"0.465LiF-0.115NaF-0.42KF",'Frandsen, 2020', 873, 2.26059)   # PDF Frandsen, 940 K, 2020
-    # analyzer.add_molten_salt('PDF_FMgNaK.csv',"0.345NaF-0.59KF-0.065MgF2",'Solano, 2021', 1073, 3.92263)   # PDF Frandsen, 940 K, 2020
-    # # analyzer.add_molten_salt('PDF_38MgCl2-21NaCl-41KCl.csv',"0.38MgCl2-0.21NaCl-0.41KCl",'Jiang, 2024', 750, 0)
-    # # analyzer.add_molten_salt('PDF_45MgCl2-33NaCl-22KCl.csv',"0.45MgCl2-0.33NaCl-0.22KCl",'Jiang, 2024', 750, 0)
-    # analyzer.add_molten_salt('0.4903NaCl-0.5097CaCl2_Wei.csv', "0.4903NaCl-0.5097CaCl2", 'Wei, 2022', 1023, 3.76913)
-    # analyzer.add_molten_salt('0.535NaCl-0.15CaCl2-0.315MgCl2_Wei.csv', "0.535NaCl-0.15CaCl2-0.315MgCl2", 'Wei, 2022', 1023, 3.52027)
-
-    # # # # # # # No thermal conductivity measurements for these
-    # analyzer.add_molten_salt('0.637LiCl-0.363KCl_Jiang.csv',"0.637LiCl-0.363KCl",'Jiang, 2024', 750, 0)# Need to fix CSV
-    # analyzer.add_molten_salt('PDF_LiF-NaF-UF4.csv',"0.5454LiF-0.3636NaF-0.091UF4",'Grizzi, 2024', 1473, 0)   # PDF Grizzi, 2024
-    # analyzer.add_molten_salt('PDF_NaCl-KCl-ZnCl2_1073.csv',"0.22NaCl-0.393KCl-0.387ZnCl2",'Xi, 2024', 1073, 0)      # Do have measurements for this one
-    # analyzer.add_molten_salt('PDF_NaCl-KCl-ZnCl2_373.csv', "0.22NaCl-0.393KCl-0.387ZnCl2", 'Xi, 2024', 373, 0)
-    # # analyzer.add_molten_salt('PDF_0.4NaF-0.186KF-0.414AlF3.csv', "0.4NaF-0.186KF-0.414AlF3", 'Zhang, 2024', 1123, 0)
-    # # analyzer.add_molten_salt('PDF_CuCl-CuCl2.csv', "0.5CuCl-0.5CuCl2", 'Raskovalov, 2018', 835, 0)  #Multiple Cu oxidation states make this difficult to calculate
-    # analyzer.add_molten_salt('PDF_LiCl-CaCl2.csv', "0.7LiCl-0.3CaCl2", 'Liang, 2024', 1073, 0)
-    # analyzer.add_molten_salt('PDF_MgCl2_Roy.csv', "1.0MgCl2", 'Roy, 2021', 1073, 4.76796)
-    # analyzer.add_molten_salt('PDF_ZnCl2_Roy.csv', "1.0ZnCl2", 'Roy, 2021', 1073, 0)
-    # analyzer.add_molten_salt('0.718KCl-0.282CaCl2_Wei.csv', "0.718KCl-0.282CaCl2", 'Wei, 2022', 1300, 0)
-    # analyzer.add_molten_salt('0.417NaCl-0.525CaCl2-0.058KCl_Wei.csv', "0.417NaCl-0.525CaCl2-0.058KCl", 'Wei, 2022', 1023, 0)
-    # analyzer.add_molten_salt('0.5NaCl-0.5KCl_Manga.csv', "0.5NaCl-0.5KCl", 'Manga, 2013', 1100, 4.32778)
-    # analyzer.add_molten_salt('0.5LiCl-0.5KCl_Jiang.csv', "0.5LiCl-0.5KCl", 'Jiang, 2016', 727, 0)
-    # analyzer.add_molten_salt('0.637LiCl-0.363KCl_Jiang.csv', "0.637LiCl-0.363KCl", 'Jiang, 2016', 673, 0)
-    # analyzer.add_molten_salt('LiCl-KCl-CeCl_Fuller.csv', "0.571LiCl-0.397KCl-0.032CeCl", 'Fuller, 2022', 773, 0)
-    # analyzer.add_molten_salt('LiCl-KCl-EuCl_Fuller.csv', "0.571LiCl-0.397KCl-0.032EuCl", 'Fuller, 2022', 773, 0)
-    # analyzer.add_molten_salt('LiCl-KCl-SmCl_Fuller.csv', "0.571LiCl-0.397KCl-0.032SmCl", 'Fuller, 2022', 773, 0)
-    # analyzer.add_molten_salt('0.5UCl-0.5KCl_Andersson.csv',"0.5KCl-0.5UCl3",'Andersson, 2024', 1250, 0)   # PDF Andersson, 2024
-    # analyzer.add_molten_salt('0.15UCl-0.85KCl_Andersson.csv',"0.85KCl-0.15UCl3",'Andersson, 2024', 1250, 0)   # PDF Andersson, 2022
-    # analyzer.add_molten_salt('0.25UCl-0.75KCl_Andersson.csv',"0.75KCl-0.25UCl3",'Andersson, 2024', 1250, 0)   # PDF Andersson, 2022
-    # analyzer.add_molten_salt('0.35UCl-0.65KCl_Andersson.csv',"0.65KCl-0.35UCl3",'Andersson, 2024', 1250, 0)   # PDF Andersson, 2022
-    # analyzer.add_molten_salt('PDF_ThF_Dai.csv',"1.0ThF4",'Dai, 2015', 1633, 0)   # PDF Dai, 2024
-    # analyzer.add_molten_salt('UF4_1357K_Ocadiz-Flores_2021.csv',"1.0UF4",'Ocadiz-Flores, 2021', 1357, 0)   # PDF Dai, 2024
-
-    # Perform analysis
+    
+    # Run
     analyzer.analyze_all()
-
-    # Plot results
     analyzer.plot_all()
 
 if __name__ == "__main__":
