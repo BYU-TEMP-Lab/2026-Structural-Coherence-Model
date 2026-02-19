@@ -878,7 +878,7 @@ def _finalize_plot(
         'columnspacing': 0.8,
         'handlelength': 1.5,
         'labelspacing': 0.3,
-        'fontsize': 14,
+        'fontsize': 13.75,
     }
     if legend_kwargs:
         legend_params.update(legend_kwargs)
