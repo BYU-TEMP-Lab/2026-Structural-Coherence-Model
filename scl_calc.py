@@ -1,4 +1,4 @@
-import os
+﻿import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -791,48 +791,52 @@ def main():
     # analyzer.add_molten_salt('PDF_LiCl.csv', "1.0LiCl", 'Walz, 2019', 878, 4.10511)
 
     # Unary Salts
-    analyzer.add_molten_salt('PDF_LiF.csv',"1.0LiF",'Walz, 2019', 1121, 3.28553)   # Walz, 2019; 1121K
-    analyzer.add_molten_salt('PDF_NaF.csv',"1.0NaF",'Walz, 2019', 1266, 5.22361)   # Walz, 2019; 1266.15K
-    analyzer.add_molten_salt('PDF_KF.csv',"1.0KF",'Walz, 2019', 1131, 4.63533)
-    analyzer.add_molten_salt('PDF_LiCl.csv',"1.0LiCl",'Walz, 2019', 878, 4.10511)
-    analyzer.add_molten_salt('NaCl_Lu.csv', "1.0NaCl", 'Lu, 2021', 1200, 4.48028)
-    analyzer.add_molten_salt('PDF_KCl.csv',"1.0KCl",'Walz, 2019', 1043, 4.47675)
-    analyzer.add_molten_salt('PDF_MgCl2_Roy.csv',"1.0MgCl2",'Roy, 2021', 1073, 4.76796)
-    analyzer.add_molten_salt('CaCl_Bu.csv',"1.0CaCl2",'Bu, 2021', 1073, 7.72598)
-    analyzer.add_molten_salt('PDF_SrCl2.csv',"1.0SrCl2",'McGreevy, 1987', 1198, 0)
+    analyzer.add_molten_salt('LiF_Walz_2019_1121.0_PIM.csv',"1.0LiF",'Walz, 2019', 1121, 3.28553)
+    analyzer.add_molten_salt('NaF_Walz_2019_1266.0_PIM.csv',"1.0NaF",'Walz, 2019', 1266, 5.22361)
+    analyzer.add_molten_salt('KF_Walz_2019_1131.0_PIM.csv',"1.0KF",'Walz, 2019', 1131, 4.63533)
+    analyzer.add_molten_salt('LiCl_Walz_2019_878.0_PIM.csv',"1.0LiCl",'Walz, 2019', 878, 4.10511)
+    analyzer.add_molten_salt('NaCl_Lu_2021_1200.0_PIM.csv', "1.0NaCl", 'Lu, 2021', 1200, 4.48028)
+    analyzer.add_molten_salt('KCl_Walz_2019_1043.0_PIM.csv',"1.0KCl",'Walz, 2019', 1043, 4.47675)
+    analyzer.add_molten_salt('MgCl2_Roy_2021_1073.0_AP.csv',"1.0MgCl2",'Roy, 2021', 1073, 4.76796)
+    analyzer.add_molten_salt('CaCl2_Bu_2021_1100.0_AP.csv',"1.0CaCl2",'Bu, 2021', 1100, 7.72598)
+    analyzer.add_molten_salt('SrCl2_McGreevy_1987_1198.0_Exp.csv',"1.0SrCl2",'McGreevy, 1987', 1198, 0)
     
     # Mixtures
-    analyzer.add_molten_salt('PDF_FLiNa.csv',"0.6LiF-0.4NaF",'Grizzi, 2024', 973, 2.63857)
-    analyzer.add_molten_salt('PDF_FLiBe_Grizzi.csv',"0.5LiF-0.5BeF2",'Sun, 2024', 900, 0)
-    analyzer.add_molten_salt('PDF_FLiBe_Fayfar.csv',"0.66LiF-0.34BeF2",'Fayfar, 2023', 973, 1.90187)
-    analyzer.add_molten_salt('0.5LiCl-0.5KCl_Jiang_CORRECTED.csv', "0.5LiCl-0.5KCl", 'Jiang, 2016', 727, 0)
-    analyzer.add_molten_salt('0.637LiCl-0.363KCl_Jiang_CORRECTED.csv',"0.637LiCl-0.363KCl",'Jiang, 2024', 750, 0)
-    analyzer.add_molten_salt('0.5NaCl-0.5KCl_Manga.csv', "0.5NaCl-0.5KCl", 'Manga, 2013', 1100, 4.32778)
-    analyzer.add_molten_salt('PDF_LiCl-CaCl2.csv', "0.7LiCl-0.3CaCl2", 'Liang, 2024', 1073, 0)
-    analyzer.add_molten_salt('0.4903NaCl-0.5097CaCl2_Wei_CORRECTED.csv', "0.4903NaCl-0.5097CaCl2", 'Wei, 2022', 1023, 3.76913)
-    analyzer.add_molten_salt('0.718KCl-0.282CaCl2_Wei_CORRECTED.csv', "0.718KCl-0.282CaCl2", 'Wei, 2022', 1300, 0)
-    analyzer.add_molten_salt('PDF_FLiNaK.csv',"0.465LiF-0.115NaF-0.42KF",'Frandsen, 2020', 873, 2.26059)
-    analyzer.add_molten_salt('PDF_FMgNaK.csv',"0.345NaF-0.59KF-0.065MgF2",'Solano, 2021', 1073, 3.92263)
-    analyzer.add_molten_salt('PDF_45MgCl2-33NaCl-22KCl.csv',"0.45MgCl2-0.33NaCl-0.22KCl",'Jiang, 2024', 750, 0)
-    analyzer.add_molten_salt('PDF_38MgCl2-21NaCl-41KCl.csv',"0.38MgCl2-0.21NaCl-0.41KCl",'Jiang, 2024', 750, 0)
-    analyzer.add_molten_salt('0.417NaCl-0.525CaCl2-0.058KCl_Wei.csv', "0.417NaCl-0.525CaCl2-0.058KCl", 'Wei, 2022', 1023, 0)
-    analyzer.add_molten_salt('0.535NaCl-0.15CaCl2-0.315MgCl2_Wei.csv', "0.535NaCl-0.15CaCl2-0.315MgCl2", 'Wei, 2022', 1023, 3.52027)
+    analyzer.add_molten_salt('0.6LiF-0.4NaF_Grizzi_2024_1473.0_AP.csv',"0.6LiF-0.4NaF",'Grizzi, 2024', 1473, 2.63857)
+    analyzer.add_molten_salt('0.5LiF-0.5BeF2_Sun_2024_900.0_AP.csv',"0.5LiF-0.5BeF2",'Sun, 2024', 900, 0)
+    analyzer.add_molten_salt('0.66LiF-0.34BeF2_Fayfar_2024_973.0_AP.csv',"0.66LiF-0.34BeF2",'Fayfar, 2024', 973, 1.90187)
+    analyzer.add_molten_salt('0.5LiCl-0.5KCl_Jiang_2016_727.0_RIM.csv', "0.5LiCl-0.5KCl", 'Jiang, 2016', 727, 0)
+    analyzer.add_molten_salt('0.637LiCl-0.363KCl_Jiang_2016_750.0_RIM.csv',"0.637LiCl-0.363KCl",'Jiang, 2016', 750, 0)
+    analyzer.add_molten_salt('0.5NaCl-0.5KCl_Manga_2014_1100.0_RIM.csv', "0.5NaCl-0.5KCl", 'Manga, 2014', 1100, 4.32778)
+    analyzer.add_molten_salt('0.7LiCl-0.3CaCl2_Liang_2024_1073.0_RIM.csv', "0.7LiCl-0.3CaCl2", 'Liang, 2024', 1073, 0)
+    analyzer.add_molten_salt('0.4903NaCl-0.5097CaCl2_Wei_2022_1023.0_RIM.csv', "0.4903NaCl-0.5097CaCl2", 'Wei, 2022', 1023, 3.76913)
+    analyzer.add_molten_salt('0.718KCl-0.282CaCl2_Wei_2022_1300.0_RIM.csv', "0.718KCl-0.282CaCl2", 'Wei, 2022', 1300, 0)
+    analyzer.add_molten_salt('0.465LiF-0.115NaF-0.42KF_Frandsen_2020_873.0_AP.csv',"0.465LiF-0.115NaF-0.42KF",'Frandsen, 2020', 873, 2.26059)
+    analyzer.add_molten_salt('0.345NaF-0.065MgF2-0.59KF_Solano_2021_1073.0_AP.csv',"0.345NaF-0.59KF-0.065MgF2",'Solano, 2021', 1073, 3.92263)
+    analyzer.add_molten_salt('0.45MgCl2-0.33NaCl-0.22KCl_Jiang_2024_750.0_PIM.csv',"0.45MgCl2-0.33NaCl-0.22KCl",'Jiang, 2024', 750, 0)
+    analyzer.add_molten_salt('0.38MgCl2-0.21NaCl-0.41KCl_Jiang_2024_750.0_PIM.csv',"0.38MgCl2-0.21NaCl-0.41KCl",'Jiang, 2024', 750, 0)
+    analyzer.add_molten_salt('0.417NaCl-0.058KCl-0.525CaCl2_Wei_2022_1023.0_RIM.csv', "0.417NaCl-0.525CaCl2-0.058KCl", 'Wei, 2022', 1023, 0)
+    analyzer.add_molten_salt('0.535NaCl-0.315MgCl2-0.15CaCl2_Wei_2022_1023.0_RIM.csv', "0.535NaCl-0.315MgCl2-0.15CaCl2", 'Wei, 2022', 1023, 3.52027)
 
     # Actinides
-    analyzer.add_molten_salt('PDF_ThF_Dai.csv',"1.0ThF4",'Dai, 2015', 1633, 0)   # PDF Dai, 2024
-    analyzer.add_molten_salt('UF4_1357K_Ocadiz-Flores_2021.csv',"1.0UF4",'Ocadiz-Flores, 2021', 1357, 0)
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_900_Zhang.csv',"0.78NaF-0.22UF4",'(900K) Zhang, 2024', 900, 0, apply_savgol=True)
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_1000_Zhang.csv',"0.78NaF-0.22UF4",'(1000K) Zhang, 2024', 1000, 0, apply_savgol=True)
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_1100_Zhang.csv',"0.78NaF-0.22UF4",'(1100K) Zhang, 2024', 1100, 0, apply_savgol=True)
-    analyzer.add_molten_salt('PDF_78NaF-22UF4_1200_Zhang.csv',"0.78NaF-0.22UF4",'(1200K) Zhang, 2024', 1200, 0, apply_savgol=True)
-    # analyzer.add_molten_salt('PDF_NaCl-UCl3.csv',"0.64NaCl-0.36UCl3",'Andersson, 2022', 1250, 2.5393)
-    analyzer.add_molten_salt('PDF_NaCl-UCl3.csv',"0.63NaCl-0.37UCl3",'Andersson, 2022', 1250, 2.5393)
-    analyzer.add_molten_salt('PDF_NaCl-UCl3.csv',"0.658NaCl-0.342UCl3",'Andersson, 2022', 1250, 2.5393)
-    analyzer.add_molten_salt('0.15UCl-0.85KCl_Andersson.csv',"0.85KCl-0.15UCl3",'Andersson, 2024', 1250, 0)   # PDF Andersson, 2022
-    analyzer.add_molten_salt('0.25UCl-0.75KCl_Andersson.csv',"0.75KCl-0.25UCl3",'Andersson, 2024', 1250, 0)   # PDF Andersson, 2022
-    analyzer.add_molten_salt('0.35UCl-0.65KCl_Andersson.csv',"0.65KCl-0.35UCl3",'Andersson, 2024', 1250, 0) 
-    analyzer.add_molten_salt('0.5UCl-0.5KCl_Andersson.csv',"0.5KCl-0.5UCl3",'Andersson, 2024', 1250, 0)
-    analyzer.add_molten_salt('PDF_LiF-NaF-UF4.csv',"0.5454LiF-0.3636NaF-0.091UF4",'Grizzi, 2024', 1473, 0)
+    analyzer.add_molten_salt('ThF4_Dai_2015_1633.0_PIM.csv',"1.0ThF4",'Dai, 2015', 1633, 0)
+    analyzer.add_molten_salt('UF4_Ocádiz-Flores_2021_1357.0_PIM.csv',"1.0UF4",'Ocadiz-Flores, 2021', 1357, 0)
+    analyzer.add_molten_salt('0.64NaCl-0.36UCl3_Andersson_2022_1250.0_AP.csv',"0.64NaCl-0.36UCl3",'Andersson, 2022', 1250, 2.5393)
+    analyzer.add_molten_salt('0.85KCl-0.15UCl3_Andersson_2024_1250.0_AP.csv',"0.85KCl-0.15UCl3",'Andersson, 2024', 1250, 0)
+    analyzer.add_molten_salt('0.75KCl-0.25UCl3_Andersson_2024_1250.0_AP.csv',"0.75KCl-0.25UCl3",'Andersson, 2024', 1250, 0)
+    analyzer.add_molten_salt('0.65KCl-0.35UCl3_Andersson_2024_1250.0_AP.csv',"0.65KCl-0.35UCl3",'Andersson, 2024', 1250, 0)
+    analyzer.add_molten_salt('0.5KCl-0.5UCl3_Andersson_2024_1250.0_AP.csv',"0.5KCl-0.5UCl3",'Andersson, 2024', 1250, 0)
+    analyzer.add_molten_salt('0.5454LiF-0.3636NaF-0.091UF4_Grizzi_2024_1473.0_AP.csv',"0.5454LiF-0.3636NaF-0.091UF4",'Grizzi, 2024', 1473, 0)
+    analyzer.add_molten_salt('0.78NaF-0.22UF4_Zhang_2026_900.0_AP.csv',"0.78NaF-0.22UF4",'(AIMD) Zhang, 2026', 900, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.78NaF-0.22UF4_Zhang_2026_900.0_PIM.csv',"0.78NaF-0.22UF4",'Zhang, 2026', 900, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.78NaF-0.22UF4_Zhang_2026_1000.0_PIM.csv',"0.78NaF-0.22UF4",'Zhang, 2026', 1000, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.78NaF-0.22UF4_Zhang_2026_1100.0_PIM.csv',"0.78NaF-0.22UF4",'Zhang, 2026', 1100, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.78NaF-0.22UF4_Zhang_2026_1200.0_PIM.csv',"0.78NaF-0.22UF4",'Zhang, 2026', 1200, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.57NaF-0.16KF-0.27UF4_Zhang_2026_900.0_PIM.csv',"0.57NaF-0.16KF-0.27UF4",'Zhang, 2026', 900, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.57NaF-0.16KF-0.27UF4_Zhang_2026_1000.0_PIM.csv',"0.57NaF-0.16KF-0.27UF4",'Zhang, 2026', 1000, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.57NaF-0.16KF-0.27UF4_Zhang_2026_1100.0_PIM.csv',"0.57NaF-0.16KF-0.27UF4",'Zhang, 2026', 1100, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.57NaF-0.16KF-0.27UF4_Zhang_2026_1200.0_PIM.csv',"0.57NaF-0.16KF-0.27UF4",'Zhang, 2026', 1200, 0, apply_savgol=True)
+    analyzer.add_molten_salt('0.63NaCl-0.37UCl3_Zhang_2026_1100.0_AP.csv',"0.63NaCl-0.37UCl3",'(AIMD) Zhang, 2026', 1100, 0, apply_savgol=True)
 
     
     # Run
