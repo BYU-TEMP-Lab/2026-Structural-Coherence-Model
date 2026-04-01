@@ -34,11 +34,11 @@ The suffix of the file names indicates the **Source Type**:
 
 1. **Requirements:** Ensure you have Python installed with `numpy`, `pandas`, and `matplotlib`.
 2. **Input Data:** Place PDF data files (columns for $r$ and $g(r)$, each labeled by elemental ion pair 'Xx-Yy') into the `PDF_CSV/` folder.
-3. **Add Salts to Script:** In the bottom *Execution* section, add a function call to specify the PDF CSV file, salt composition, (optional) author label, PDF temperature, (optional) back-calculated SCL, and SavGol filter option
+3. **Add Salts to Script:** In the bottom *Execution* section of `SCL_calc.py`, add a function call to specify the PDF CSV file, salt composition, (optional) author label, PDF temperature, (optional) back-calculated SCL, and SavGol filter option
 4. **Run the Model:**
    ```bash
-   python scl_calc.py
-5. **View Results:** Check 'scl_results.csv' for numerical predictions and 'SCL_plots/' for visual analysis.
+   python SCL_calc.py
+5. **View Results:** Check `SCL_results.csv` for numerical predictions and `SCL_plots/` for visual analysis.
 
 ## Citation
 If you use this model or the data in this repository, please cite:
