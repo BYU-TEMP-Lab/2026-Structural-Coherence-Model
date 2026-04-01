@@ -38,7 +38,7 @@ The suffix of the file names indicates the **Source Type**:
 4. **Run the Model:**
    ```bash
    python scl_calc.py
-5. **View Results:** Check \verb|scl_results.csv| for numerical predictions and \verb|SCL_plots/| for visual analysis.
+5. **View Results:** Check 'scl_results.csv' for numerical predictions and 'SCL_plots/' for visual analysis.
 
 ## Citation
 If you use this model or the data in this repository, please cite:
